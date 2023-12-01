@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+    "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" >
+<svg contentScriptType="text/ecmascript" width="553.526"
+     xmlns:xlink="http://www.w3.org/1999/xlink" zoomAndPan="magnify"
+     contentStyleType="text/css"
+     viewBox="-270.150940 -387.998199 553.526001 595.025879" height="595.0259"
+     preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"
+     version="1.1">
+    <g id="edges">
+        <path fill="none" stroke-width="1.5"
+              d="M -215.753830,128.382492 L -82.450310,136.787918"
+              class="id_Inner_Tracker id_Tracking" stroke-opacity="1.0"
+              stroke="#00c7ff"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -215.085281,163.548950 L -82.279518,139.777008"
+              class="id_Outer_Tracker_PS id_Tracking" stroke-opacity="1.0"
+              stroke="#00c7ff"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -213.335571,91.516350 L -81.875969,133.751083"
+              class="id_Outer_Tracker_2S id_Tracking" stroke-opacity="1.0"
+              stroke="#00c7ff"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -217.036316,198.221985 L -81.530991,142.340149"
+              class="id_Track_Finder_TPG id_Tracking" stroke-opacity="1.0"
+              stroke="#00c7ff"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -217.152145,-8.489586 L -81.120903,13.744694"
+              class="id_MIP_Timing_BTL id_Timing" stroke-opacity="1.0"
+              stroke="#fa9200"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -217.468323,34.788452 L -81.183495,17.347773"
+              class="id_MIP_Timing_ETL id_Timing" stroke-opacity="1.0"
+              stroke="#fa9200"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -219.129318,-122.788872 L -79.367821,-107.188019"
+              class="id_ECAL_Barrel id_Calorimetry" stroke-opacity="1.0"
+              stroke="#69c404"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -219.233246,-53.375954 L -78.764236,-101.732529"
+              class="id_HCAL_Barrel id_Calorimetry" stroke-opacity="1.0"
+              stroke="#69c404"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -220.621857,-88.120842 L -79.363060,-104.372627"
+              class="id_HCAL_HO id_Calorimetry" stroke-opacity="1.0"
+              stroke="#69c404"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -220.556320,-153.876297 L -78.874397,-109.534813"
+              class="id_HCAL_HF id_Calorimetry" stroke-opacity="1.0"
+              stroke="#69c404"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -220.157700,-317.319946 L -84.584831,-292.102539"
+              class="id_Muon_DT id_Muon" stroke-opacity="1.0" stroke="#e28bff"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -221.759293,-378.546387 L -83.044250,-296.197662"
+              class="id_Muon_CSC id_Muon" stroke-opacity="1.0" stroke="#e28bff"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -221.083527,-249.790939 L -84.366478,-286.569489"
+              class="id_Muon_GEM_GE1 id_Muon" stroke-opacity="1.0"
+              stroke="#e28bff"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -221.675232,-214.124390 L -83.445862,-284.166718"
+              class="id_Muon_GEM_GE2 id_Muon" stroke-opacity="1.0"
+              stroke="#e28bff"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -219.351135,-285.349030 L -84.789848,-289.437103"
+              class="id_Muon_GEM_ME0 id_Muon" stroke-opacity="1.0"
+              stroke="#e28bff"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -220.891495,-347.078857 L -83.959541,-294.311432"
+              class="id_Muon_RPC id_Muon" stroke-opacity="1.0" stroke="#e28bff"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -67.870918,133.038849 L 36.565838,-92.083237"
+              class="id_Tracking id_Intermediate" stroke-opacity="1.0"
+              stroke="#7f92c2"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -65.383331,12.096178 L 33.323063,-94.260269"
+              class="id_Timing id_Intermediate" stroke-opacity="1.0"
+              stroke="#fc7742"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -61.946171,-105.692001 L 29.329229,-103.695786"
+              class="id_Calorimetry id_Intermediate" stroke-opacity="1.0"
+              stroke="#b49044"/>
+        <path fill="none" stroke-width="1.5"
+              d="M -69.684799,-285.552460 L 35.299194,-114.083038"
+              class="id_Muon id_Intermediate" stroke-opacity="1.0"
+              stroke="#f074c2"/>
+        <path fill="none" stroke-width="1.5"
+              d="M 46.826233,-103.430817 L 161.155624,-103.621727"
+              class="id_Intermediate id_Global" stroke-opacity="1.0"
+              stroke="#7f8686"/>
+        <path fill="none" stroke-width="1.5"
+              d="M 178.655594,-103.631783 L 259.209045,-103.457512"
+              class="id_Global id_Disk" stroke-opacity="1.0" stroke="#408d77"/>
+    </g>
+    <g id="arrows">
+        <polyline fill="#00c7ff" fill-opacity="1.0"
+                  class="id_Inner_Tracker id_Tracking"
+                  points="-74.965172,137.259888 -82.686295,140.530487 -82.214325,133.045349"
+                  stroke="none"/>
+        <polyline fill="#00c7ff" fill-opacity="1.0"
+                  class="id_Outer_Tracker_PS id_Tracking"
+                  points="-74.896858,138.455521 -81.618774,143.468338 -82.940262,136.085678"
+                  stroke="none"/>
+        <polyline fill="#00c7ff" fill-opacity="1.0"
+                  class="id_Outer_Tracker_2S id_Tracking"
+                  points="-74.735435,136.045151 -83.023010,137.321350 -80.728928,130.180817"
+                  stroke="none"/>
+        <polyline fill="#00c7ff" fill-opacity="1.0"
+                  class="id_Track_Finder_TPG id_Tracking"
+                  points="-74.597443,139.480789 -80.101311,145.806915 -82.960670,138.873383"
+                  stroke="none"/>
+        <polyline fill="#fa9200" fill-opacity="1.0"
+                  class="id_MIP_Timing_BTL id_Timing"
+                  points="-73.719124,14.954513 -81.725815,17.445583 -80.515991,10.043804"
+                  stroke="none"/>
+        <polyline fill="#fa9200" fill-opacity="1.0"
+                  class="id_MIP_Timing_ETL id_Timing"
+                  points="-73.744164,16.395744 -80.707481,21.067438 -81.659508,13.628107"
+                  stroke="none"/>
+        <polyline fill="#69c404" fill-opacity="1.0"
+                  class="id_ECAL_Barrel id_Calorimetry"
+                  points="-71.914116,-106.356003 -79.783829,-103.461166 -78.951813,-110.914871"
+                  stroke="none"/>
+        <polyline fill="#69c404" fill-opacity="1.0"
+                  class="id_HCAL_Barrel id_Calorimetry"
+                  points="-71.672684,-104.173805 -77.543602,-98.186752 -79.984871,-105.278305"
+                  stroke="none"/>
+        <polyline fill="#69c404" fill-opacity="1.0"
+                  class="id_HCAL_HO id_Calorimetry"
+                  points="-71.912209,-105.229843 -78.934448,-100.647202 -79.791672,-108.098053"
+                  stroke="none"/>
+        <polyline fill="#69c404" fill-opacity="1.0"
+                  class="id_HCAL_HF id_Calorimetry"
+                  points="-71.716743,-107.294716 -79.994446,-105.955986 -77.754349,-113.113640"
+                  stroke="none"/>
+        <polyline fill="#e28bff" fill-opacity="1.0" class="id_Muon_DT id_Muon"
+                  points="-77.211304,-290.731018 -85.270592,-288.415771 -83.899071,-295.789307"
+                  stroke="none"/>
+        <polyline fill="#e28bff" fill-opacity="1.0" class="id_Muon_CSC id_Muon"
+                  points="-76.595070,-292.369080 -84.958542,-292.973083 -81.129959,-299.422241"
+                  stroke="none"/>
+        <polyline fill="#e28bff" fill-opacity="1.0"
+                  class="id_Muon_GEM_GE1 id_Muon"
+                  points="-77.123962,-288.517792 -83.392319,-282.948242 -85.340637,-290.190735"
+                  stroke="none"/>
+        <polyline fill="#e28bff" fill-opacity="1.0"
+                  class="id_Muon_GEM_GE2 id_Muon"
+                  points="-76.755714,-287.556702 -81.750877,-280.821655 -85.140846,-287.511780"
+                  stroke="none"/>
+        <polyline fill="#e28bff" fill-opacity="1.0"
+                  class="id_Muon_GEM_ME0 id_Muon"
+                  points="-77.293312,-289.664856 -84.675972,-285.688843 -84.903725,-293.185364"
+                  stroke="none"/>
+        <polyline fill="#e28bff" fill-opacity="1.0" class="id_Muon_RPC id_Muon"
+                  points="-76.961189,-291.614594 -85.307968,-290.812256 -82.611115,-297.810608"
+                  stroke="none"/>
+        <polyline fill="#7f92c2" fill-opacity="1.0"
+                  class="id_Tracking id_Intermediate"
+                  points="39.722080,-98.886780 39.967606,-90.505119 33.164070,-93.661354"
+                  stroke="none"/>
+        <polyline fill="#fc7742" fill-opacity="1.0"
+                  class="id_Timing id_Intermediate"
+                  points="38.424969,-99.757591 36.071724,-91.709312 30.574402,-96.811226"
+                  stroke="none"/>
+        <polyline fill="#b49044" fill-opacity="1.0"
+                  class="id_Calorimetry id_Intermediate"
+                  points="36.827435,-103.531792 29.247236,-99.946686 29.411222,-107.444885"
+                  stroke="none"/>
+        <polyline fill="#f074c2" fill-opacity="1.0"
+                  class="id_Muon id_Intermediate"
+                  points="39.215424,-107.686699 32.101025,-112.124924 38.497364,-116.041153"
+                  stroke="none"/>
+        <polyline fill="#7f8686" fill-opacity="1.0"
+                  class="id_Intermediate id_Global"
+                  points="168.655609,-103.634254 161.161880,-99.871735 161.149368,-107.371719"
+                  stroke="none"/>
+        <polyline fill="#408d77" fill-opacity="1.0" class="id_Global id_Disk"
+                  points="266.709015,-103.441284 259.200928,-99.707520 259.217163,-107.207504"
+                  stroke="none"/>
+    </g>
+    <g id="nodes">
+        <circle fill-opacity="1.0" fill="#00c7ff" r="4.6" cx="-220.74393"
+                class="id_Inner_Tracker" cy="128.06784" stroke="#008bb2"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#00c7ff" r="4.6" cx="-220.00705"
+                class="id_Outer_Tracker_PS" cy="164.42993" stroke="#008bb2"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#00c7ff" r="4.6" cx="-218.09593"
+                class="id_Outer_Tracker_2S" cy="89.98696" stroke="#008bb2"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#00c7ff" r="4.6" cx="-221.65868"
+                class="id_Track_Finder_TPG" cy="200.12823" stroke="#008bb2"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#fa9200" r="4.6" cx="-222.08667"
+                class="id_MIP_Timing_BTL" cy="-9.296132" stroke="#af6600"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#fa9200" r="4.6" cx="-222.42787"
+                class="id_MIP_Timing_ETL" cy="35.423138" stroke="#af6600"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#69c404" r="4.6" cx="-224.09845"
+                class="id_ECAL_Barrel" cy="-123.34355" stroke="#498902"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#69c404" r="4.6" cx="-223.96095"
+                class="id_HCAL_Barrel" cy="-51.748436" stroke="#498902"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#69c404" r="4.6" cx="-225.5891"
+                class="id_HCAL_HO" cy="-87.54936" stroke="#498902"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#69c404" r="4.6" cx="-225.3281"
+                class="id_HCAL_HF" cy="-155.36969" stroke="#498902"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#e28bff" r="4.6" cx="-225.07338"
+                class="id_Muon_DT" cy="-318.23428" stroke="#9e61b2"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#e28bff" r="4.6" cx="-226.05875"
+                class="id_Muon_CSC" cy="-381.0988" stroke="#9e61b2"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#e28bff" r="4.6" cx="-225.91187"
+                class="id_Muon_GEM_GE1" cy="-248.49205" stroke="#9e61b2"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#e28bff" r="4.6" cx="-226.13533"
+                class="id_Muon_GEM_GE2" cy="-211.86441" stroke="#9e61b2"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#e28bff" r="4.6" cx="-224.34883"
+                class="id_Muon_GEM_ME0" cy="-285.1972" stroke="#9e61b2"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#e28bff" r="4.6" cx="-225.55707"
+                class="id_Muon_RPC" cy="-348.87677" stroke="#9e61b2"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#00c7ff" r="4.6" cx="-69.97508"
+                class="id_Tracking" cy="137.57454" stroke="#008bb2"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#fa9200" r="4.6" cx="-68.78461"
+                class="id_Timing" cy="15.761059" stroke="#af6600"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#69c404" r="4.6" cx="-66.94498"
+                class="id_Calorimetry" cy="-105.80132" stroke="#498902"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#e28bff" r="4.6" cx="-72.295616"
+                class="id_Muon" cy="-289.81668" stroke="#9e61b2"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#ff5d85" r="4.6" cx="41.82624"
+                class="id_Intermediate" cy="-103.42247" stroke="#b2415d"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#00af87" r="4.6" cx="173.65561"
+                class="id_Global" cy="-103.6426" stroke="#007a5e"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+        <circle fill-opacity="1.0" fill="#806b68" r="4.6" cx="271.709"
+                class="id_Disk" cy="-103.430466" stroke="#594a48"
+                stroke-opacity="1.0" stroke-width="0.79999995"/>
+    </g>
+    <g id="node-labels">
+        <text font-size="12" x="-220.74393" y="130.25046" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Inner_Tracker">
+            Inner Tracker
+        </text>
+        <text font-size="12" x="-220.00705" y="166.6521" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Outer_Tracker_PS">
+            Outer Tracker PS
+        </text>
+        <text font-size="12" x="-218.09593" y="92.20913" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Outer_Tracker_2S">
+            Outer Tracker 2S
+        </text>
+        <text font-size="12" x="-221.65868" y="202.34894" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Track_Finder_TPG">
+            Track Finder TPG
+        </text>
+        <text font-size="12" x="-222.08667" y="-6.5173235" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_MIP_Timing_BTL">
+            MIP Timing BTL
+        </text>
+        <text font-size="12" x="-222.42787" y="38.201946" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_MIP_Timing_ETL">
+            MIP Timing ETL
+        </text>
+        <text font-size="12" x="-224.09845" y="-121.12285" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_ECAL_Barrel">
+            ECAL Barrel
+        </text>
+        <text font-size="12" x="-223.96095" y="-49.527733" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_HCAL_Barrel">
+            HCAL Barrel
+        </text>
+        <text font-size="12" x="-225.5891" y="-85.327194" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_HCAL_HO">
+            HCAL HO
+        </text>
+        <text font-size="12" x="-225.3281" y="-153.14899" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_HCAL_HF">
+            HCAL HF
+        </text>
+        <text font-size="12" x="-225.07338" y="-316.05167" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Muon_DT">
+            Muon DT
+        </text>
+        <text font-size="12" x="-226.05875" y="-378.87808" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Muon_CSC">
+            Muon CSC
+        </text>
+        <text font-size="12" x="-225.91187" y="-246.27135" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Muon_GEM_GE1">
+            Muon GEM GE1
+        </text>
+        <text font-size="12" x="-226.13533" y="-209.6437" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Muon_GEM_GE2">
+            Muon GEM GE2
+        </text>
+        <text font-size="12" x="-224.34883" y="-282.9765" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Muon_GEM_ME0">
+            Muon GEM ME0
+        </text>
+        <text font-size="12" x="-225.55707" y="-346.65607" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Muon_RPC">
+            Muon RPC
+        </text>
+        <text font-size="12" x="-69.97508" y="140.35335" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Tracking">
+            Tracking
+        </text>
+        <text font-size="12" x="-68.78461" y="18.539867" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Timing">
+            Timing
+        </text>
+        <text font-size="12" x="-66.94498" y="-102.98589" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Calorimetry">
+            Calorimetry
+        </text>
+        <text font-size="12" x="-72.295616" y="-287.63406" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Muon">
+            Muon
+        </text>
+        <text font-size="12" x="41.82624" y="-100.63487" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Intermediate">
+            Level-1 Trigger
+        </text>
+        <text font-size="12" x="173.65561" y="-100.86379" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Global">
+            High-Level Trigger
+        </text>
+        <text font-size="12" x="271.709" y="-101.24785" fill="#000000"
+              style="text-anchor: middle; dominant-baseline: central;"
+              font-family="Arial" class="id_Disk">
+            Disk
+        </text>
+    </g>
+</svg>

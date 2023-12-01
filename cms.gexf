@@ -1,0 +1,57 @@
+<?xml version='1.0' encoding='utf-8'?>
+<gexf xmlns="http://www.gexf.net/1.2draft" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.gexf.net/1.2draft http://www.gexf.net/1.2draft/gexf.xsd" version="1.2">
+  <meta lastmodifieddate="2023-11-28">
+    <creator>NetworkX 3.0</creator>
+  </meta>
+  <graph defaultedgetype="directed" mode="static" name="">
+    <nodes>
+      <node id="Inner Tracker" label="Inner Tracker" />
+      <node id="Outer Tracker PS" label="Outer Tracker PS" />
+      <node id="Outer Tracker 2S" label="Outer Tracker 2S" />
+      <node id="Track Finder TPG" label="Track Finder TPG" />
+      <node id="MIP Timing BTL" label="MIP Timing BTL" />
+      <node id="MIP Timing ETL" label="MIP Timing ETL" />
+      <node id="ECAL Barrel" label="ECAL Barrel" />
+      <node id="HCAL Barrel" label="HCAL Barrel" />
+      <node id="HCAL HO" label="HCAL HO" />
+      <node id="HCAL HF" label="HCAL HF" />
+      <node id="Muon DT" label="Muon DT" />
+      <node id="Muon CSC" label="Muon CSC" />
+      <node id="Muon GEM GE1" label="Muon GEM GE1" />
+      <node id="Muon GEM GE2" label="Muon GEM GE2" />
+      <node id="Muon GEM ME0" label="Muon GEM ME0" />
+      <node id="Muon RPC" label="Muon RPC" />
+      <node id="Tracking" label="Tracking" />
+      <node id="Timing" label="Timing" />
+      <node id="Calorimetry" label="Calorimetry" />
+      <node id="Muon" label="Muon" />
+      <node id="Intermediate" label="Intermediate" />
+      <node id="Global" label="Global" />
+      <node id="Disk" label="Disk" />
+    </nodes>
+    <edges>
+      <edge source="Inner Tracker" target="Tracking" id="0" />
+      <edge source="Outer Tracker PS" target="Tracking" id="1" />
+      <edge source="Outer Tracker 2S" target="Tracking" id="2" />
+      <edge source="Track Finder TPG" target="Tracking" id="3" />
+      <edge source="MIP Timing BTL" target="Timing" id="4" />
+      <edge source="MIP Timing ETL" target="Timing" id="5" />
+      <edge source="ECAL Barrel" target="Calorimetry" id="6" />
+      <edge source="HCAL Barrel" target="Calorimetry" id="7" />
+      <edge source="HCAL HO" target="Calorimetry" id="8" />
+      <edge source="HCAL HF" target="Calorimetry" id="9" />
+      <edge source="Muon DT" target="Muon" id="10" />
+      <edge source="Muon CSC" target="Muon" id="11" />
+      <edge source="Muon GEM GE1" target="Muon" id="12" />
+      <edge source="Muon GEM GE2" target="Muon" id="13" />
+      <edge source="Muon GEM ME0" target="Muon" id="14" />
+      <edge source="Muon RPC" target="Muon" id="15" />
+      <edge source="Tracking" target="Intermediate" id="16" />
+      <edge source="Timing" target="Intermediate" id="17" />
+      <edge source="Calorimetry" target="Intermediate" id="18" />
+      <edge source="Muon" target="Intermediate" id="19" />
+      <edge source="Intermediate" target="Global" id="20" />
+      <edge source="Global" target="Disk" id="21" />
+    </edges>
+  </graph>
+</gexf>

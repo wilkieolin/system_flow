@@ -72,11 +72,11 @@ def construct_graph(detector_data: pd.DataFrame, trigger_data: pd.DataFrame):
 
     return g, globals
 
-def classifier_rate(error_matrix: np.ndarray):
+def classifier_rate(error_matrix):
         """
         Return the negative / positive classification rate from an error matrix
         """
-        rates = np.einsum("ab,a -> a", error_matrix, np.array([1, 1]))
+        rates = np.einsum("ab,a -> a", np.array(error_matrix), np.array([1, 1]))
         return rates / rates.sum()
 
 def message_size(graph: nx.classes.digraph, node: str):
