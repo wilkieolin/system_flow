@@ -22,79 +22,6 @@ def detectors(detector_data: pd.DataFrame):
         system = detector["Category"]
         properties = {
                       "sample data": detector["Data (bytes)"],
-                      "error matrix": entry_to_confusion(detector),
-                      "reduction": 1.0 - detector["Compression"],
-                      "complexity": lambda x: x,
-                      }
-        nodes.append((name, properties))
-        edges.append((name, system))
-
-    return nodes, edges
-
-def triggers(trigger_data: pd.DataFrame):
-    n = len(trigger_data)
-    edges = []
-    triggers = []
-
-    for i in range(n):
-        trigger = trigger_data.iloc[i]
-        name = trigger["Name"]
-        edge = (trigger["Input"], trigger["Output"])
-        properties = {
-            "error matrix": entry_to_confusion(trigger),
-            "reduction": 1.0 - trigger["Compression"],
-            "sample data": trigger["Data (bytes)"],
-        }
-        triggers.append((name, properties))
-        edges.append(edge)
-
-    return triggers, edges
-
-def identify_root(graph: nx.classes.digraph):
-    od = list(graph.out_degree)
-    roots = list(filter(lambda x: x[1] == 0, od))
-    assert len(roots) == 1, "More than 1 root identified"
-    return roots[0]
-
-def construct_graph(detector_data: pd.DataFrame, trigger_data: pd.DataFrame):
-    g = nx.DiGraph()
-
-    detector_nodes, detector_edges = detectors(detector_data)
-    g.add_nodes_from(detector_nodes)
-
-    trigger_nodes, trigger_edges = triggers(trigger_data)
-    g.add_nodes_from(trigger_nodes)
-    g.add_edges_from(detector_edges)
-    g.add_edges_from(trigger_edges)
-    return g
-
-    globals = measure(g)
-    for k, v in globals:
-        g[k] = v
-
-    return g, globals
-
-def lean_copy(graph: nx.classes.digraph):
-    g = nx.Digraph()
-    for n in list(graph.nodes):
-        g.add_node(n)
-
-    for e in list(graph.edges):
-        g.add_edge(*e)
-
-    return g
-
-def detectors(detector_data: pd.DataFrame):
-    n = len(detector_data)
-    nodes = []
-    edges = []
-
-    for i in range(n):
-        detector = detector_data.iloc[i]
-        name = detector["Detector"]
-        system = detector["Category"]
-        properties = {
-                      "sample data": detector["Data (bytes)"],
                       "sample rate": detector["Sample Rate"],
                       "error matrix": entry_to_confusion(detector),
                       "reduction": 1.0 - detector["Compression"],
@@ -117,6 +44,7 @@ def triggers(trigger_data: pd.DataFrame):
             "error matrix": entry_to_confusion(trigger),
             "reduction": 1.0 - trigger["Compression"],
             "sample data": trigger["Data (bytes)"],
+            "complexity": lambda x: x,
         }
         triggers.append((name, properties))
 
@@ -127,7 +55,13 @@ def triggers(trigger_data: pd.DataFrame):
 
     return triggers, edges
 
-def construct_graph(detector_data: pd.DataFrame, trigger_data: pd.DataFrame):
+def identify_root(graph: nx.classes.digraph):
+    od = list(graph.out_degree)
+    roots = list(filter(lambda x: x[1] == 0, od))
+    assert len(roots) == 1, "More than 1 root identified"
+    return roots[0]
+
+def construct_graph(detector_data: pd.DataFrame, trigger_data: pd.DataFrame, functions: dict):
     g = nx.DiGraph()
     #add the nodes for detectors
     detector_nodes, detector_edges = detectors(detector_data)
@@ -144,10 +78,27 @@ def construct_graph(detector_data: pd.DataFrame, trigger_data: pd.DataFrame):
         print("Graph must be a tree (acyclic), check definition")
         return None
 
+    #update the complexity functions with those passed from the dictionary
+    for n in g.nodes:
+        if n in functions.keys():
+            fn = functions[n]
+            g.nodes[n]["complexity"] = fn
+
     #identify the final (root) node
     root = identify_root(g)
     g.graph["Root Node"] = root[0]
     g = update_throughput(g)
+    return g
+
+
+def lean_copy(graph: nx.classes.digraph):
+    g = nx.DiGraph()
+    for n in list(graph.nodes):
+        g.add_node(n)
+
+    for e in list(graph.edges):
+        g.add_edge(*e)
+
     return g
 
 def classifier_rate(error_matrix: np.ndarray):
@@ -171,6 +122,7 @@ def message_size(graph: nx.classes.digraph, node: str):
 
     total = total * this_node["reduction"]
     this_node["message size"] = total
+    this_node["ops"] = this_node["complexity"](total)
     return total
 
 def message_rate(graph: nx.classes.digraph, node: str):
