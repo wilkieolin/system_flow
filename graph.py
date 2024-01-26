@@ -1,14 +1,55 @@
 import networkx as nx
 import numpy as np
 import pandas as pd
+from scipy.stats import norm
+from scipy.optimize import minimize_scalar
+
+class Classifier:
+    def __init__(self, selectivity, skill, varscale = 1.0):
+        self.skill = skill
+        self.selectivity = selectivity
+        self.varscale = varscale
+
+        #distribution of Y = 0 (reject) given X (data)
+        self.false = lambda x: norm.cdf(x, loc=0.0, scale=varscale)
+        #distribution of Y = 1 (accept) given X (data)
+        self.true = lambda x: norm.cdf(x, loc=skill, scale=varscale)
+        #data rejected given a threshold
+        self.reject = lambda x: (self.false(x) + self.true(x)) / 2.0
+        #data accepted given a threshold
+        self.accept = lambda x: 1.0 - self.reject(x)
+        self.ratio_fn = lambda x: self.accept(x) / self.reject(x)
+        self.threshold = self.solve_ratio()
+
+        self.tn = self.false(self.threshold) / 2.0
+        self.fn = self.true(self.threshold) / 2.0
+        self.tp = (1.0 - self.true(self.threshold)) / 2.0
+        self.fp = (1.0 - self.false(self.threshold)) / 2.0
+
+        self.confusion = np.array([[self.tn, self.fn], [self.fp, self.tp]])
+
+    def solve_ratio(self):
+        opt_fn = lambda x: np.abs(self.selectivity - self.ratio_fn(x))
+        soln = minimize_scalar(opt_fn, bounds=(0.0, 20.0))
+        if soln.success:
+            return soln.x
+        else:
+            print("Solving for classification threshold failed")
+            
 
 def entry_to_confusion(entry: pd.core.series.Series):
-    tp = entry["True Pass"]
-    td = entry["True Discard"]
-    fp = entry["False Pass (alpha)"]
-    fd = entry["False Discard (beta)"]
+    skill_u = entry["Skill mean"]
+    skill_v = entry["Skill variance"]
+    reduction = entry["Reduction"]
 
-    confusion = np.array([[td, fd], [fp, tp]])
+    if reduction == 1:
+        #no data is being rejected, so this is not truly a classifier
+        #everything is 'true positive' (pass)
+        confusion = np.array([[0.0, 0.0], [0.0, 1.0]])
+    else:
+        classifier = Classifier(1 / reduction, skill_u, varscale = skill_v)
+        confusion = classifier.confusion
+    
     return confusion
 
 def detectors(detector_data: pd.DataFrame):
