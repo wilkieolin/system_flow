@@ -45,11 +45,15 @@ def entry_to_confusion(entry: pd.core.series.Series):
     if reduction == 1:
         #no data is being rejected, so this is not truly a classifier
         #everything is 'true positive' (pass)
-        confusion = np.array([[0.0, 0.0], [0.0, 1.0]])
+        confusion = passing_node()
     else:
         classifier = Classifier(1 / reduction, skill_u, varscale = skill_v)
         confusion = classifier.confusion
     
+    return confusion
+
+def passing_node():
+    confusion = np.array([[0.0, 0.0], [0.0, 1.0]])
     return confusion
 
 def detectors(detector_data: pd.DataFrame):
@@ -64,7 +68,7 @@ def detectors(detector_data: pd.DataFrame):
         properties = {
                       "sample data": detector["Data (bytes)"],
                       "sample rate": detector["Sample Rate"],
-                      "error matrix": entry_to_confusion(detector),
+                      "error matrix": passing_node(),
                       "reduction": 1.0 - detector["Compression"],
                       "complexity": lambda x: x,
                       }
