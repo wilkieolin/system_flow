@@ -5,9 +5,11 @@ from scipy.stats import norm
 from scipy.optimize import minimize_scalar
 
 class Classifier:
-    def __init__(self, selectivity, skill, varscale = 1.0):
+    def __init__(self, ratio, skill, varscale = 1.0):
         self.skill = skill
-        self.selectivity = selectivity
+        self.ratio  = ratio
+        self.selectivity = 1 / ratio
+        self.n = ratio + 1
         self.varscale = varscale
 
         #distribution of Y = 0 (reject) given X (data)
@@ -15,16 +17,17 @@ class Classifier:
         #distribution of Y = 1 (accept) given X (data)
         self.true = lambda x: norm.cdf(x, loc=skill, scale=varscale)
         #data rejected given a threshold
-        self.reject = lambda x: (self.false(x) + self.true(x)) / 2.0
+        #assume the selectivity we're giving reflects the ratio of the true scores generated
+        self.reject = lambda x: ((self.ratio) * self.false(x) + self.true(x))/ self.n
         #data accepted given a threshold
         self.accept = lambda x: 1.0 - self.reject(x)
         self.ratio_fn = lambda x: self.accept(x) / self.reject(x)
         self.threshold = self.solve_ratio()
 
-        self.tn = self.false(self.threshold) / 2.0
-        self.fn = self.true(self.threshold) / 2.0
-        self.tp = (1.0 - self.true(self.threshold)) / 2.0
-        self.fp = (1.0 - self.false(self.threshold)) / 2.0
+        self.tn = self.false(self.threshold) * (ratio / self.n)
+        self.fn = self.true(self.threshold) * (1 / self.n)
+        self.tp = (1.0 - self.true(self.threshold)) * (1 / self.n)
+        self.fp = (1.0 - self.false(self.threshold)) * (ratio / self.n)
 
         self.confusion = np.array([[self.tn, self.fn], [self.fp, self.tp]])
 
@@ -153,9 +156,15 @@ def classifier_rate(error_matrix: np.ndarray):
         rates = np.einsum("ab,a -> a", error_matrix, np.array([1, 1]))
         return rates / rates.sum()
 
+def contingency(graph: nx.classes.digraph, node: str):
+    """
+    Starting from the root node, determine the performance at each classifier node
+    """
+
+
 def message_size(graph: nx.classes.digraph, node: str):
     """
-    Return the total size of a message processed by a node
+    Recursively process message passing over the graph to determine the data through each node
     """
     inputs = list(graph.predecessors(node))
     input_data = sum([message_size(graph, n) for n in inputs])
@@ -186,7 +195,7 @@ def message_rate(graph: nx.classes.digraph, node: str):
     
     output_rate = classifier_rate(this_node["error matrix"])[1] * input_rate
     this_node["message rate"] = output_rate
-    return output_rate 
+    return output_rate
 
 def link_throughput(graph: nx.classes.digraph):
     def calc_throughput(edge):
