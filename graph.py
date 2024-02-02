@@ -4,6 +4,11 @@ import pandas as pd
 from scipy.stats import norm
 from scipy.optimize import minimize_scalar
 
+class DummyClassifier:
+    def __init__(self):
+        self.ratio  = 1
+        self.error_matrix = np.array([[0.0, 0.0], [0.0, 1.0]])
+
 class Classifier:
     def __init__(self, ratio, skill, varscale = 1.0):
         self.skill = skill
@@ -29,7 +34,7 @@ class Classifier:
         self.tp = (1.0 - self.true(self.threshold)) * (1 / self.n)
         self.fp = (1.0 - self.false(self.threshold)) * (ratio / self.n)
 
-        self.confusion = np.array([[self.tn, self.fn], [self.fp, self.tp]])
+        self.error_matrix = np.array([[self.tn, self.fn], [self.fp, self.tp]])
 
     def solve_ratio(self):
         opt_fn = lambda x: np.abs(self.selectivity - self.ratio_fn(x))
@@ -40,24 +45,21 @@ class Classifier:
             print("Solving for classification threshold failed")
             
 
-def entry_to_confusion(entry: pd.core.series.Series):
+def entry_to_classifier(entry: pd.core.series.Series):
     skill_u = entry["Skill mean"]
     skill_v = entry["Skill variance"]
     reduction = entry["Reduction"]
-
-    if reduction == 1:
-        #no data is being rejected, so this is not truly a classifier
-        #everything is 'true positive' (pass)
-        confusion = passing_node()
-    else:
-        classifier = Classifier(1 / reduction, skill_u, varscale = skill_v)
-        confusion = classifier.confusion
     
-    return confusion
+    if reduction == 1.0:
+        classifier = DummyClassifier()
+    else:
+        classifier = Classifier(reduction, skill_u, varscale = skill_v)
+
+    return classifier
 
 def passing_node():
-    confusion = np.array([[0.0, 0.0], [0.0, 1.0]])
-    return confusion
+    error_matrix = np.array([[0.0, 0.0], [0.0, 1.0]])
+    return error_matrix
 
 def detectors(detector_data: pd.DataFrame):
     n = len(detector_data)
@@ -88,8 +90,11 @@ def triggers(trigger_data: pd.DataFrame):
     for i in range(n):
         trigger = trigger_data.iloc[i]
         name = trigger["Name"]
+        classifier = entry_to_classifier(trigger)
+
         properties = {
-            "error matrix": entry_to_confusion(trigger),
+            "classifier": classifier,
+            "error matrix": classifier.error_matrix,
             "reduction": 1.0 - trigger["Compression"],
             "sample data": trigger["Data (bytes)"],
             "complexity": lambda x: x,
