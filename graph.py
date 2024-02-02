@@ -161,10 +161,15 @@ def classifier_rate(error_matrix: np.ndarray):
         rates = np.einsum("ab,a -> a", error_matrix, np.array([1, 1]))
         return rates / rates.sum()
 
-def contingency(graph: nx.classes.digraph, node: str):
+def contingency(graph: nx.classes.digraph):
     """
     Starting from the root node, determine the performance at each classifier node
     """
+    def calc_contingency(node):
+        this_node = graph.nodes[node]
+        this_node["contingency"] = np.round(this_node["error matrix"] * this_node["input rate"])
+
+    list(map(calc_contingency, graph.nodes))
 
 
 def message_size(graph: nx.classes.digraph, node: str):
@@ -197,6 +202,8 @@ def message_rate(graph: nx.classes.digraph, node: str):
         inputs = list(graph.predecessors(node))
         assert len(inputs) > 0, "Missing sample rate from detector or isolated node"
         input_rate = max([message_rate(graph, n) for n in inputs])
+
+    this_node["input rate"] = input_rate
     
     output_rate = classifier_rate(this_node["error matrix"])[1] * input_rate
     this_node["message rate"] = output_rate
@@ -214,9 +221,12 @@ def update_throughput(graph: nx.classes.digraph):
     graph = graph.copy()
     #call the recursive update function on the root node
     root = graph.graph["Root Node"]
+    #propagate from root to leaves
     message_size(graph, root)
     message_rate(graph, root)
+    #update graph statistics (postprocess)
     link_throughput(graph)
+    contingency(graph)
     
     return graph
     
