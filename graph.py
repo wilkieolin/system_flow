@@ -2,6 +2,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import functools
+import metrics
 from scipy.stats import norm
 from scipy.optimize import minimize_scalar
 
@@ -78,7 +79,7 @@ def downstream_classifier(graph, node):
 Find the nodes in a graph with active classifiers
 """
 def active_classifiers(graph):
-    nodes = [(n, has_classifier(cms_run3.nodes[n])) for n in cms_run3.nodes()]
+    nodes = [(n, has_classifier(graph.nodes[n])) for n in graph.nodes()]
     nodes = list(filter(lambda x: x[1], nodes))
     nodes = [n[0] for n in nodes]
     return nodes
@@ -136,16 +137,19 @@ def detectors(detector_data: pd.DataFrame):
     for i in range(n):
         detector = detector_data.iloc[i]
         name = detector["Detector"]
-        system = detector["Category"]
-        properties = {
+        
+        node_properties = {
                       "sample data": detector["Data (bytes)"],
                       "sample rate": detector["Sample Rate"],
+                      "op efficiency": detector["Op Effiency (J/op)"],
                       "error matrix": passing_node(),
                       "reduction": 1.0 - detector["Compression"],
                       "complexity": lambda x: x,
                       }
-        nodes.append((name, properties))
-        edges.append((name, system))
+        nodes.append((name, node_properties))
+
+        edge_properties = {"link efficiency": detector["Link Efficiency (J/bit)"],}
+        edges.append((name, detector["Category"], edge_properties))
 
     return nodes, edges
 
@@ -162,18 +166,20 @@ def triggers(trigger_data: pd.DataFrame):
         name = trigger["Name"]
         classifier = entry_to_classifier(trigger)
 
-        properties = {
+        node_properties = {
             "classifier": classifier,
             "error matrix": classifier.error_matrix,
             "reduction": 1.0 - trigger["Compression"],
+            "op efficiency": trigger["Op Efficiency (J/op)"],
             "sample data": trigger["Data (bytes)"],
             "complexity": lambda x: x,
         }
-        triggers.append((name, properties))
+        triggers.append((name, node_properties))
 
         output = trigger["Output"]
         if not pd.isna(output):
-            edge = (trigger["Name"], trigger["Output"])
+            edge_properties = {"link efficiency": trigger["Link Efficiency (J/bit)"],}
+            edge = (trigger["Name"], trigger["Output"], edge_properties)
             edges.append(edge)
 
     return triggers, edges
@@ -192,7 +198,7 @@ def identify_root(graph: nx.classes.digraph):
 Given dataframes representing the system's detectors, processing nodes, and processor scaling estimates,
 construct the graph representing it
 """
-def construct_graph(detector_data: pd.DataFrame, trigger_data: pd.DataFrame, functions: dict):
+def construct_graph(detector_data: pd.DataFrame, trigger_data: pd.DataFrame, globals: pd.DataFrame, functions: dict):
     g = nx.DiGraph()
     #add the nodes for detectors
     detector_nodes, detector_edges = detectors(detector_data)
@@ -203,6 +209,8 @@ def construct_graph(detector_data: pd.DataFrame, trigger_data: pd.DataFrame, fun
     #connect the systems
     g.add_edges_from(detector_edges)
     g.add_edges_from(trigger_edges)
+    #add other information
+    g.graph["globals"] = globals
 
     #check that it's acyclic
     if not nx.is_directed_acyclic_graph(g):
@@ -257,17 +265,24 @@ def contingency(graph: nx.classes.digraph):
 Recursively process message passing over the graph to determine the data through each node
 """
 def message_size(graph: nx.classes.digraph, node: str):
+    #find the inputs to this node
     inputs = list(graph.predecessors(node))
+    #list how much data each produces
     input_data = sum([message_size(graph, n) for n in inputs])
     this_node = graph.nodes[node]
+
+    #calculate the total number of bits accepted as input
     if "sample data" in this_node:
         total = input_data + this_node["sample data"]
     else:
         total = input_data
 
-    total = total * this_node["reduction"]
     this_node["message size"] = total
+
+    #predict the processing cost this will incur
     this_node["ops"] = this_node["complexity"](total)
+    #apply any data reduction which might take place
+    total = total * this_node["reduction"]
     return total
 
 """
@@ -285,7 +300,7 @@ def message_rate(graph: nx.classes.digraph, node: str):
         input_rate = max([message_rate(graph, n) for n in inputs])
 
     this_node["input rate"] = input_rate
-    
+    #find how many outputs will be produced per second by this node
     output_rate = classifier_rate(this_node["error matrix"])[1] * input_rate
     this_node["message rate"] = output_rate
     return output_rate
@@ -301,6 +316,25 @@ def link_throughput(graph: nx.classes.digraph):
 
     list(map(calc_throughput, graph.edges))
 
+def link_power(graph: nx.classes.digraph):
+    def calc_power(edge):
+        p = edge["link efficiency"] * edge["throughput"] * 8
+        return p
+    
+    power = [calc_power(graph.edges[e]) for e in graph.edges]
+    total = functools.reduce(lambda x, y: x + y, power)
+    return total
+
+def op_power(graph: nx.classes.digraph):
+    def calc_power(node):
+        p = node["op efficiency"] * node["ops"]
+        return p
+    
+    power = [calc_power(graph.nodes[n]) for n in graph.nodes]
+    total = functools.reduce(lambda x, y: x + y, power)
+    return total
+    
+
 """
 Given a graph, propagate message sizes, estimate processing requirements, 
 calculate data rates, and produce classification statistics
@@ -314,7 +348,21 @@ def update_throughput(graph: nx.classes.digraph):
     message_rate(graph, root)
     #update graph statistics (postprocess)
     link_throughput(graph)
+    #calculate overall classifier performance
     contingency(graph)
+
+    #calculate power resources & metrics
+    graph.graph["link power"] = link_power(graph)
+    graph.graph["op power"] = op_power(graph)
+    graph.graph["performance"] = pipeline_contingency(graph)
     
     return graph
     
+
+def graph_from_spreadsheet(filename: str, functions: dict):
+    detectors = pd.read_excel(filename, sheet_name="Detectors")
+    triggers = pd.read_excel(filename, sheet_name="Triggers")
+    globals = pd.read_excel(filename, sheet_name="Global")
+
+    graph = construct_graph(detectors, triggers, globals, functions)
+    return graph
