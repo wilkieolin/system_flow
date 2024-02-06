@@ -141,7 +141,7 @@ def detectors(detector_data: pd.DataFrame):
         node_properties = {
                       "sample data": detector["Data (bytes)"],
                       "sample rate": detector["Sample Rate"],
-                      "op efficiency": detector["Op Effiency (J/op)"],
+                      "op efficiency": detector["Op Efficiency (J/op)"],
                       "error matrix": passing_node(),
                       "reduction": 1.0 - detector["Compression"],
                       "complexity": lambda x: x,
@@ -312,13 +312,20 @@ def link_throughput(graph: nx.classes.digraph):
     def calc_throughput(edge):
         input_node = graph.nodes[edge[0]]
         throughput = input_node["message size"] * input_node["message rate"]
+        graph.edges[edge]["message size"] = input_node["message size"]
         graph.edges[edge]["throughput"] = throughput
 
     list(map(calc_throughput, graph.edges))
 
 def link_power(graph: nx.classes.digraph):
     def calc_power(edge):
+        #include bytes to bits conversion
+        e = edge["link efficiency"] * edge["message size"] * 8
+        edge["energy"] = e
+
         p = edge["link efficiency"] * edge["throughput"] * 8
+        edge["power"] = p
+        
         return p
     
     power = [calc_power(graph.edges[e]) for e in graph.edges]
@@ -327,7 +334,12 @@ def link_power(graph: nx.classes.digraph):
 
 def op_power(graph: nx.classes.digraph):
     def calc_power(node):
-        p = node["op efficiency"] * node["ops"]
+        e = node["op efficiency"] * node["ops"]
+        node["energy"] = e
+
+        p = e * node["input rate"]
+        node["power"] = p
+
         return p
     
     power = [calc_power(graph.nodes[n]) for n in graph.nodes]
