@@ -3,55 +3,8 @@ import numpy as np
 import pandas as pd
 import functools
 import metrics
-from scipy.stats import norm
-from scipy.optimize import minimize_scalar
+from statistics import *
 
-"""
-Placeholder object for a node which doesn't classify (reject) data - only passes it
-"""
-class DummyClassifier:
-    def __init__(self):
-        self.ratio  = 1
-        self.error_matrix = np.array([[0.0, 0.0], [0.0, 1.0]])
-
-"""
-Object to estimate the classification statistics of a processing node based on normal processes
-"""
-class Classifier:
-    def __init__(self, ratio, skill, varscale = 1.0):
-        self.skill = skill
-        self.ratio  = ratio
-        self.selectivity = 1 / ratio
-        self.n = ratio + 1
-        self.varscale = varscale
-
-        #distribution of Y = 0 (reject) given X (data)
-        self.false = lambda x: norm.cdf(x, loc=0.0, scale=varscale)
-        #distribution of Y = 1 (accept) given X (data)
-        self.true = lambda x: norm.cdf(x, loc=skill, scale=varscale)
-        #data rejected given a threshold
-        #assume the selectivity we're giving reflects the ratio of the true scores generated
-        self.reject = lambda x: ((self.ratio) * self.false(x) + self.true(x))/ self.n
-        #data accepted given a threshold
-        self.accept = lambda x: 1.0 - self.reject(x)
-        self.ratio_fn = lambda x: self.accept(x) / self.reject(x)
-        self.threshold = self.solve_ratio()
-
-        self.tn = self.false(self.threshold) * (ratio / self.n)
-        self.fn = self.true(self.threshold) * (1 / self.n)
-        self.tp = (1.0 - self.true(self.threshold)) * (1 / self.n)
-        self.fp = (1.0 - self.false(self.threshold)) * (ratio / self.n)
-
-        self.error_matrix = np.array([[self.tn, self.fn], [self.fp, self.tp]])
-
-    def solve_ratio(self):
-        opt_fn = lambda x: np.abs(self.selectivity - self.ratio_fn(x))
-        soln = minimize_scalar(opt_fn, bounds=(0.0, 20.0))
-        if soln.success:
-            return soln.x
-        else:
-            print("Solving for classification threshold failed")
-            
 """
 Determine if a node has an active classifier
 """
@@ -120,13 +73,6 @@ def entry_to_classifier(entry: pd.core.series.Series):
 
 
 """
-Error matrix representing a dummy classifier (no classification)
-"""
-def passing_node():
-    error_matrix = np.array([[0.0, 0.0], [0.0, 1.0]])
-    return error_matrix
-
-"""
 Return nodes and edges from a dataframe representing the system's data sources (detectors)
 """
 def detectors(detector_data: pd.DataFrame):
@@ -137,13 +83,17 @@ def detectors(detector_data: pd.DataFrame):
     for i in range(n):
         detector = detector_data.iloc[i]
         name = detector["Detector"]
+        classifier = DummyClassifier()
         
         node_properties = {
                       "sample data": detector["Data (bytes)"],
                       "sample rate": detector["Sample Rate"],
+                      "type": "detector",
                       "op efficiency": detector["Op Efficiency (J/op)"],
-                      "error matrix": passing_node(),
-                      "reduction": 1.0 - detector["Compression"],
+                      "classifier": classifier,
+                      "error matrix": classifier.error_matrix,
+                      "rejection ratio": 1.0, #by definition, a detector produces data and does not reject any
+                      "data reduction": 1.0 - detector["Compression"], #it can compress it, though
                       "complexity": lambda x: x,
                       }
         nodes.append((name, node_properties))
@@ -169,7 +119,9 @@ def triggers(trigger_data: pd.DataFrame):
         node_properties = {
             "classifier": classifier,
             "error matrix": classifier.error_matrix,
-            "reduction": 1.0 - trigger["Compression"],
+            "type": "processor",
+            "rejection ratio": trigger["Reduction"],
+            "data reduction": 1.0 - trigger["Compression"],
             "op efficiency": trigger["Op Efficiency (J/op)"],
             "sample data": trigger["Data (bytes)"],
             "complexity": lambda x: x,
@@ -191,7 +143,9 @@ def identify_root(graph: nx.classes.digraph):
     od = list(graph.out_degree)
     roots = list(filter(lambda x: x[1] == 0, od))
     assert len(roots) == 1, "More than 1 root identified"
-    return roots[0]
+    node = roots[0][0]
+    graph.nodes[node]["type"] = "storage"
+    return node
 
 
 """
@@ -225,7 +179,7 @@ def construct_graph(detector_data: pd.DataFrame, trigger_data: pd.DataFrame, glo
 
     #identify the final (root) node
     root = identify_root(g)
-    g.graph["Root Node"] = root[0]
+    g.graph["Root Node"] = root
     g = update_throughput(g)
     return g
 
@@ -282,7 +236,7 @@ def message_size(graph: nx.classes.digraph, node: str):
     #predict the processing cost this will incur
     this_node["ops"] = this_node["complexity"](total)
     #apply any data reduction which might take place
-    total = total * this_node["reduction"]
+    total = total * this_node["data reduction"]
     return total
 
 """
@@ -304,6 +258,52 @@ def message_rate(graph: nx.classes.digraph, node: str):
     output_rate = classifier_rate(this_node["error matrix"])[1] * input_rate
     this_node["message rate"] = output_rate
     return output_rate
+
+"""
+For each node, calculate the ratio of messages it produces to the number stored
+at the final node
+"""
+def calc_rejection(graph: nx.classes.digraph):
+    def inner(node):
+        downstream = list(nx.dfs_postorder_nodes(graph, node))
+        ratios = [graph.nodes[n]["rejection ratio"] for n in downstream]
+        total_reduction = functools.reduce(lambda x, y: x * y, ratios)
+        graph.nodes[node]["global ratio"] = total_reduction
+
+    list(map(inner, graph.nodes))
+
+
+"""
+Propagate the classification of relevant/irrelevant messages kept and discarded
+through the pipeline
+"""
+def propagate_statistics(graph: nx.classes.digraph, node: str):
+    #if the node is a detector, begin the error propagation
+    if node["type"] == "detector":
+        positives = node["sample rate"] / node["global ratio"]
+        negatives = node["sample rate"] - positives
+        statistics = np.array([negatives, positives])
+
+        return statistics
+
+    #if it's a processor, recurse through the inputs
+    else:
+        previous = list(graph.predecessors(node))
+        n_previous = len(previous)
+
+        #collect statistics over inputs
+        statistics = [propagate_statistics(graph, n) for n in previous]
+        #store inputs into edges
+        edges = [(n, node) for n in previous]
+        for (i,e) in enumerate(edges):
+            graph.edges[e]["statistics"] = statistics[i]
+        
+        #take the average over the input nodes to collate inputs into a single file
+        statistics = functools.reduce(lambda x, y: x + y, statics) / n_previous
+        #obtain results produced through this classifier
+        output = statistics * node["error matrix"]
+        return output
+
 
 """
 For each edge in a graph, calculate data throughput via each link
@@ -360,6 +360,7 @@ def update_throughput(graph: nx.classes.digraph):
     message_rate(graph, root)
     #update graph statistics (postprocess)
     link_throughput(graph)
+    calc_rejection(graph)
     #calculate overall classifier performance
     contingency(graph)
 
@@ -370,11 +371,15 @@ def update_throughput(graph: nx.classes.digraph):
     
     return graph
     
-
-def graph_from_spreadsheet(filename: str, functions: dict):
+def dataframes_from_spreadsheet(filename: str):
     detectors = pd.read_excel(filename, sheet_name="Detectors")
     triggers = pd.read_excel(filename, sheet_name="Triggers")
     globals = pd.read_excel(filename, sheet_name="Global")
 
+    return detectors, triggers, globals
+
+def graph_from_spreadsheet(filename: str, functions: dict):
+    detectors, triggers, globals = dataframes_from_spreadsheet(filename)
     graph = construct_graph(detectors, triggers, globals, functions)
+
     return graph
