@@ -205,26 +205,6 @@ def message_size(graph: nx.classes.digraph, node: str):
     return total
 
 """
-Return the rate of messages produced by a node
-"""
-def message_rate(graph: nx.classes.digraph, node: str):
-    this_node = graph.nodes[node]
-    if "sample rate" in this_node:
-        #get the sampling rate of a detector
-        input_rate = this_node["sample rate"]
-    else:
-        #or take the maximum rate of the inputs
-        inputs = list(graph.predecessors(node))
-        assert len(inputs) > 0, "Missing sample rate from detector or isolated node"
-        input_rate = max([message_rate(graph, n) for n in inputs])
-
-    this_node["input rate"] = input_rate
-    #find how many outputs will be produced per second by this node
-    output_rate = np.sum(get_passed(this_node["contingency"]))
-    this_node["output rate"] = output_rate
-    return output_rate
-
-"""
 For each node, calculate the ratio of messages it produces to the number stored
 at the final node
 """
@@ -249,6 +229,8 @@ def propagate_statistics(graph: nx.classes.digraph, node_name: str):
     if node["type"] == "detector":
         positives = node["sample rate"] / node["global ratio"]
         negatives = node["sample rate"] - positives
+        node["input rate"] = node["sample rate"]
+        node["output rate"] = node["sample rate"]
         node["contingency"] = np.array([[0, 0], [negatives, positives]])
         output = get_passed(node["contingency"])
         node["discards"] = get_rejected(node["contingency"])
@@ -270,6 +252,7 @@ def propagate_statistics(graph: nx.classes.digraph, node_name: str):
         #take the average over the input nodes to collate inputs into a single file
         inputs = functools.reduce(lambda x, y: x + y, inputs) / n_previous
         #construct the classifier model for this node
+        node["input rate"] = np.sum(inputs)
         classifier = Classifier(inputs, *node["classifier properties"])
         node["classifier"] = classifier
         node["error matrix"] = classifier.error_matrix
@@ -341,17 +324,16 @@ def update_throughput(graph: nx.classes.digraph):
     
     message_size(graph, root)
     propagate_statistics(graph, root)
-    #message_rate(graph, root)
     #update graph statistics (postprocess)
-    #link_throughput(graph)
+    link_throughput(graph)
     
     #calculate overall classifier performance
     #propagate_statistics
 
     #calculate power resources & metrics
-    #graph.graph["link power"] = link_power(graph)
-    #graph.graph["op power"] = op_power(graph)
-    #graph.graph["performance"] = pipeline_contingency(graph)
+    graph.graph["link power"] = link_power(graph)
+    graph.graph["op power"] = op_power(graph)
+    graph.graph["performance"] = pipeline_contingency(graph)
     
     return graph
     
