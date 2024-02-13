@@ -55,22 +55,6 @@ def pipeline_contingency(graph):
 
     return contingency
     
-"""
-Given a pandas series that defines a classifier by data reduction and skill,
-convert it to a classifier object or dummy classifier (no classification in node)
-"""
-def entry_to_classifier(entry: pd.core.series.Series):
-    skill_u = entry["Skill mean"]
-    skill_v = entry["Skill variance"]
-    reduction = entry["Reduction"]
-    
-    if reduction == 1.0:
-        classifier = DummyClassifier()
-    else:
-        classifier = Classifier(reduction, skill_u, varscale = skill_v)
-
-    return classifier
-
 
 """
 Return nodes and edges from a dataframe representing the system's data sources (detectors)
@@ -114,11 +98,10 @@ def triggers(trigger_data: pd.DataFrame):
     for i in range(n):
         trigger = trigger_data.iloc[i]
         name = trigger["Name"]
-        classifier = entry_to_classifier(trigger)
+        classifier_properties = [trigger["Reduction"], trigger["Skill mean"], trigger["Skill variance"]]
 
         node_properties = {
-            "classifier": classifier,
-            "error matrix": classifier.error_matrix,
+            "classifier properties": classifier_properties,
             "type": "processor",
             "rejection ratio": trigger["Reduction"],
             "data reduction": 1.0 - trigger["Compression"],
@@ -198,24 +181,6 @@ def lean_copy(graph: nx.classes.digraph):
     return g
 
 """
-Return the negative / positive classification rate from an error matrix
-"""
-def classifier_rate(error_matrix: np.ndarray):
-        
-        rates = np.einsum("ab,a -> a", error_matrix, np.array([1, 1]))
-        return rates / rates.sum()
-
-"""
-Starting from the root node, determine the performance at each classifier node
-"""
-def contingency(graph: nx.classes.digraph):
-    def calc_contingency(node):
-        this_node = graph.nodes[node]
-        this_node["contingency"] = np.round(this_node["error matrix"] * this_node["input rate"])
-
-    list(map(calc_contingency, graph.nodes))
-
-"""
 Recursively process message passing over the graph to determine the data through each node
 """
 def message_size(graph: nx.classes.digraph, node: str):
@@ -255,8 +220,8 @@ def message_rate(graph: nx.classes.digraph, node: str):
 
     this_node["input rate"] = input_rate
     #find how many outputs will be produced per second by this node
-    output_rate = classifier_rate(this_node["error matrix"])[1] * input_rate
-    this_node["message rate"] = output_rate
+    output_rate = np.sum(get_passed(this_node["contingency"]))
+    this_node["output rate"] = output_rate
     return output_rate
 
 """
@@ -277,31 +242,46 @@ def calc_rejection(graph: nx.classes.digraph):
 Propagate the classification of relevant/irrelevant messages kept and discarded
 through the pipeline
 """
-def propagate_statistics(graph: nx.classes.digraph, node: str):
+def propagate_statistics(graph: nx.classes.digraph, node_name: str):
+    node = graph.nodes[node_name]
+
     #if the node is a detector, begin the error propagation
     if node["type"] == "detector":
         positives = node["sample rate"] / node["global ratio"]
         negatives = node["sample rate"] - positives
-        statistics = np.array([negatives, positives])
+        node["contingency"] = np.array([[0, 0], [negatives, positives]])
+        output = get_passed(node["contingency"])
+        node["discards"] = get_rejected(node["contingency"])
 
-        return statistics
+        return output
 
     #if it's a processor, recurse through the inputs
     else:
-        previous = list(graph.predecessors(node))
+        previous = list(graph.predecessors(node_name))
         n_previous = len(previous)
 
         #collect statistics over inputs
-        statistics = [propagate_statistics(graph, n) for n in previous]
+        inputs = [propagate_statistics(graph, n) for n in previous]
         #store inputs into edges
-        edges = [(n, node) for n in previous]
+        edges = [(n, node_name) for n in previous]
         for (i,e) in enumerate(edges):
-            graph.edges[e]["statistics"] = statistics[i]
+            graph.edges[e]["statistics"] = inputs[i]
         
         #take the average over the input nodes to collate inputs into a single file
-        statistics = functools.reduce(lambda x, y: x + y, statics) / n_previous
+        inputs = functools.reduce(lambda x, y: x + y, inputs) / n_previous
+        #construct the classifier model for this node
+        classifier = Classifier(inputs, *node["classifier properties"])
+        node["classifier"] = classifier
+        node["error matrix"] = classifier.error_matrix
+
         #obtain results produced through this classifier
-        output = statistics * node["error matrix"]
+        statistics = inputs * node["error matrix"]
+        node["contingency"] = statistics
+        #separate messages discarded & accepted by classifier
+        node["discards"] = get_rejected(statistics)
+        output = get_passed(statistics)
+        node["output rate"] = np.sum(output)
+
         return output
 
 
@@ -311,7 +291,7 @@ For each edge in a graph, calculate data throughput via each link
 def link_throughput(graph: nx.classes.digraph):
     def calc_throughput(edge):
         input_node = graph.nodes[edge[0]]
-        throughput = input_node["message size"] * input_node["message rate"]
+        throughput = input_node["message size"] * input_node["output rate"]
         graph.edges[edge]["message size"] = input_node["message size"]
         graph.edges[edge]["throughput"] = throughput
 
@@ -355,19 +335,23 @@ def update_throughput(graph: nx.classes.digraph):
     graph = graph.copy()
     #call the recursive update function on the root node
     root = graph.graph["Root Node"]
-    #propagate from root to leaves
-    message_size(graph, root)
-    message_rate(graph, root)
-    #update graph statistics (postprocess)
-    link_throughput(graph)
+    #calculate the global rejection ratio
     calc_rejection(graph)
+    #propagate from root to leaves
+    
+    message_size(graph, root)
+    propagate_statistics(graph, root)
+    #message_rate(graph, root)
+    #update graph statistics (postprocess)
+    #link_throughput(graph)
+    
     #calculate overall classifier performance
-    contingency(graph)
+    #propagate_statistics
 
     #calculate power resources & metrics
-    graph.graph["link power"] = link_power(graph)
-    graph.graph["op power"] = op_power(graph)
-    graph.graph["performance"] = pipeline_contingency(graph)
+    #graph.graph["link power"] = link_power(graph)
+    #graph.graph["op power"] = op_power(graph)
+    #graph.graph["performance"] = pipeline_contingency(graph)
     
     return graph
     

@@ -29,23 +29,28 @@ Object to estimate the classification statistics of a processing node based on n
 Object to estimate the classification statistics of a processing node based on normal processes
 """
 class Classifier:
-    def __init__(self, ratio, skill, varscale = 1.0):
+    def __init__(self, inputs, ratio, skill, varscale = 1.0):
+        if ratio <= 1.0:
+            self.ratio = 1
+            self.error_matrix = passing_node()
+        
+        self.falses = inputs[0]
+        self.trues = inputs[1]
+        self.n = inputs[0] + inputs[1]
         self.skill = skill
-        self.ratio  = ratio
+        self.ratio  = ratio - 1
         self.varscale = varscale
-
-        self.pos = 1 / ratio
-        self.neg = 1 - self.pos
 
         #distribution of Y = 0 (reject) given X (data)
         self.false = lambda x: norm.cdf(x, loc=0.0, scale=varscale)
         #distribution of Y = 1 (accept) given X (data)
         self.true = lambda x: norm.cdf(x, loc=skill, scale=varscale)
         #assume the selectivity we're giving reflects the ratio of the true scores generated
-        self.scores = lambda x: self.neg * self.false(x) + self.pos * self.true(x)
+        self.scores = lambda x: (self.falses * self.false(x) + self.trues * self.true(x)) / (self.n)
         #data accepted given a threshold
         self.accept = lambda x: 1.0 - self.scores(x)
-        self.ratio_fn = lambda x: self.accept(x) / self.scores(x)
+        #ratio is amount of data discarded over amount accepted
+        self.ratio_fn = lambda x: self.scores(x) / self.accept(x)
         #get the data selection threshold
         self.threshold = self.solve_ratio()
         
