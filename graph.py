@@ -9,10 +9,12 @@ from statistics import *
 Determine if a node has an active classifier
 """
 def has_classifier(node):
+    #determine if it's a dummy classifier
     if "classifier" in node.keys():
         return type(node["classifier"]) is Classifier
+    #determine if the classifier is active
     else:
-        return False
+        return node["classifier"].active
     
 """
 Given a node, determine if there's a processing node after it which contains an active classifier
@@ -45,6 +47,7 @@ def pipeline_contingency(graph):
     classifiers = active_classifiers(graph)
     assert len(classifiers) > 0, "No classifiers in processing graph"
 
+    #initialize the
     contingency = np.zeros_like(graph.nodes[classifiers[0]]["contingency"])
     for c in classifiers:
         #if there's another classifier after this, add only the rejection statistics
