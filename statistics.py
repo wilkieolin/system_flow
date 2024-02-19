@@ -27,10 +27,10 @@ def get_passed(matrix):
 Object to estimate the classification statistics of a processing node based on normal processes
 """
 class Classifier:
-    def __init__(self, inputs, ratio, skill, varscale = 1.0):
+    def __init__(self, reduction, skill, varscale = 1.0):
         #if the ratio is one, then pass all data
-        if ratio <= 1.0:
-            self.ratio = 1
+        if reduction < 0.0:
+            self.reduction = 0.0
             self.active = False
             self.error_matrix = passing_node()
         
@@ -40,7 +40,7 @@ class Classifier:
             self.n = inputs[0] + inputs[1]
             assert self.n > 0, "must have inputs to define distribution"
             self.skill = skill
-            self.ratio  = ratio - 1
+            self.reduction  = reduction
             self.varscale = varscale
             self.active = True
 
@@ -48,7 +48,7 @@ class Classifier:
             self.false = lambda x: norm.cdf(x, loc=0.0, scale=varscale)
             #distribution of Y = 1 (accept) given X (data)
             self.true = lambda x: norm.cdf(x, loc=skill, scale=varscale)
-            #assume the selectivity we're giving reflects the ratio of the true scores generated
+            #the distribution of scores depends on the input data to the classifier
             self.scores = lambda x: (self.falses * self.false(x) + self.trues * self.true(x)) / (self.n)
             #data accepted given a threshold
             self.accept = lambda x: 1.0 - self.scores(x)
