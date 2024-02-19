@@ -7,7 +7,7 @@ Placeholder object for a node which doesn't classify (reject) data - only passes
 """
 class DummyClassifier:
     def __init__(self):
-        self.ratio  = 1
+        self.reduction  = 0
         self.error_matrix = passing_node()
 
 """
@@ -23,24 +23,28 @@ def get_rejected(matrix):
 def get_passed(matrix):
     return matrix[1,:]
 
+def reduction_to_samples(reduction, n=1000):
+    pos = n * reduction
+    neg = n - pos
+    samples = [pos, neg]
+    return samples
+
 """
 Object to estimate the classification statistics of a processing node based on normal processes
 """
 class Classifier:
-    def __init__(self, reduction, skill, varscale = 1.0):
-        #if the ratio is one, then pass all data
+    def __init__(self, reduction, skill, varscale = 1.0, n = 1000):
+        #if the reduction is zero, pass all data
         if reduction < 0.0:
             self.reduction = 0.0
             self.active = False
             self.error_matrix = passing_node()
         
         else:
-            self.falses = inputs[0]
-            self.trues = inputs[1]
-            self.n = inputs[0] + inputs[1]
-            assert self.n > 0, "must have inputs to define distribution"
-            self.skill = skill
+            self.n = n
+            self.pos, self.neg = reduction_to_samples(reduction, n)
             self.reduction  = reduction
+            self.skill = skill
             self.varscale = varscale
             self.active = True
 
@@ -49,13 +53,9 @@ class Classifier:
             #distribution of Y = 1 (accept) given X (data)
             self.true = lambda x: norm.cdf(x, loc=skill, scale=varscale)
             #the distribution of scores depends on the input data to the classifier
-            self.scores = lambda x: (self.falses * self.false(x) + self.trues * self.true(x)) / (self.n)
-            #data accepted given a threshold
-            self.accept = lambda x: 1.0 - self.scores(x)
-            #ratio is amount of data discarded over amount accepted
-            self.ratio_fn = lambda x: self.scores(x) / self.accept(x)
+            self.scores = lambda x: (self.neg * self.false(x) + self.pos * self.true(x)) / (self.n)
             #get the data selection threshold
-            self.threshold = self.solve_ratio()
+            self.threshold = self.solve_reduction()
             
             self.tn = self.false(self.threshold)
             self.fn = self.true(self.threshold)
@@ -64,12 +64,15 @@ class Classifier:
 
             self.error_matrix = np.array([[self.tn, self.fn], [self.fp, self.tp]])
 
-    def solve_ratio(self):
-        opt_fn = lambda x: np.abs(self.ratio - self.ratio_fn(x))
+    def solve_reduction(self):
+        opt_fn = lambda x: np.abs(self.reduction - self.scores(x))
         soln = minimize_scalar(opt_fn, bounds=(0.0, 20.0))
         if soln.success:
             return soln.x
         else:
             print("Solving for classification threshold failed:")
-            print("T:", self.trues, "F:", self.falses, "Ratio:", self.ratio)
+            print("T:", self.pos, "F:", self.neg, "Ratio:", self.reduction)
             return 0.0
+        
+    def __call__(self, inputs):
+        return inputs * self.error_matrix 
