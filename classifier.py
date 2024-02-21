@@ -26,23 +26,36 @@ def get_passed(matrix):
 def reduction_to_samples(reduction, n=1000):
     pos = n * reduction
     neg = n - pos
-    samples = [pos, neg]
+    samples = [neg, pos]
     return samples
+
+def reduction_to_ratio(reduction):
+    return 1.0 / (1.0 - reduction)
+
+def ratio_to_reduction(reduction_ratio):
+    return 1.0 - 1.0 / reduction_ratio
 
 """
 Object to estimate the classification statistics of a processing node based on normal processes
 """
 class Classifier:
-    def __init__(self, reduction, skill, varscale = 1.0, n = 1000):
+    def __init__(self, reduction, skill, varscale = 1.0, n = 1000, inputs = None):
         #if the reduction is zero, pass all data
-        if reduction < 0.0:
+        if reduction <= 0.0:
             self.reduction = 0.0
             self.active = False
             self.error_matrix = passing_node()
         
         else:
-            self.n = n
-            self.pos, self.neg = reduction_to_samples(reduction, n)
+            #if there are no inputs provided, assume they match the ideal value (the reduction ratio)
+            if inputs is None:
+                self.n = n
+                self.neg, self.pos = reduction_to_samples(reduction, n)
+            #otherwise, they follow another distribution
+            else:
+                assert len(inputs) == 2, "Inputs provided must be number of falses and trues in a vector"
+                self.neg, self.pos = inputs
+                self.n = self.neg + self.pos
             self.reduction  = reduction
             self.skill = skill
             self.varscale = varscale

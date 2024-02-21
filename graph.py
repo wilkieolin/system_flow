@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import functools
 import metrics
-from statistics import *
+from classifier import *
 
 """
 Determine if a node has an active classifier
@@ -79,7 +79,8 @@ def detectors(detector_data: pd.DataFrame):
                       "op efficiency": detector["Op Efficiency (J/op)"],
                       "classifier": classifier,
                       "error matrix": classifier.error_matrix,
-                      "rejection ratio": 1.0, #by definition, a detector produces data and does not reject any
+                      "reduction ratio": 1.0,
+                      "reduction": 0.0, #by definition, a detector produces data and does not reject any
                       "data reduction": 1.0 - detector["Compression"], #it can compress it, though
                       "complexity": lambda x: x,
                       }
@@ -101,12 +102,15 @@ def triggers(trigger_data: pd.DataFrame):
     for i in range(n):
         trigger = trigger_data.iloc[i]
         name = trigger["Name"]
-        classifier_properties = [trigger["Reduction"], trigger["Skill mean"], trigger["Skill variance"]]
+        rr = trigger["Reduction Ratio"]
+        reduction = ratio_to_reduction(rr)
+        classifier_properties = [reduction, trigger["Skill mean"], trigger["Skill variance"]]
 
         node_properties = {
             "classifier properties": classifier_properties,
             "type": "processor",
-            "rejection ratio": trigger["Reduction"],
+            "reduction ratio": rr,
+            "reduction": reduction,
             "data reduction": 1.0 - trigger["Compression"],
             "op efficiency": trigger["Op Efficiency (J/op)"],
             "sample data": trigger["Data (bytes)"],
@@ -214,7 +218,7 @@ at the final node
 def calc_rejection(graph: nx.classes.digraph):
     def inner(node):
         downstream = list(nx.dfs_postorder_nodes(graph, node))
-        ratios = [graph.nodes[n]["rejection ratio"] for n in downstream]
+        ratios = [graph.nodes[n]["reduction ratio"] for n in downstream]
         total_reduction = functools.reduce(lambda x, y: x * y, ratios)
         graph.nodes[node]["global ratio"] = total_reduction
 
@@ -230,11 +234,12 @@ def propagate_statistics(graph: nx.classes.digraph, node_name: str):
 
     #if the node is a detector, begin the error propagation
     if node["type"] == "detector":
+        #determine the number of true and false samples which will propagate out
         positives = node["sample rate"] / node["global ratio"]
         negatives = node["sample rate"] - positives
+        node["contingency"] = np.array([[0, 0], [negatives, positives]])
         node["input rate"] = node["sample rate"]
         node["output rate"] = node["sample rate"]
-        node["contingency"] = np.array([[0, 0], [negatives, positives]])
         output = get_passed(node["contingency"])
         node["discards"] = get_rejected(node["contingency"])
 
@@ -247,7 +252,7 @@ def propagate_statistics(graph: nx.classes.digraph, node_name: str):
 
         #collect statistics over inputs
         inputs = [propagate_statistics(graph, n) for n in previous]
-        #store inputs into edges
+        #store inputs into the incoming edges
         edges = [(n, node_name) for n in previous]
         for (i,e) in enumerate(edges):
             graph.edges[e]["statistics"] = inputs[i]
@@ -256,12 +261,12 @@ def propagate_statistics(graph: nx.classes.digraph, node_name: str):
         inputs = functools.reduce(lambda x, y: x + y, inputs) / n_previous
         #construct the classifier model for this node
         node["input rate"] = np.sum(inputs)
-        classifier = Classifier(inputs, *node["classifier properties"])
+        classifier = Classifier(*node["classifier properties"], inputs=inputs)
         node["classifier"] = classifier
         node["error matrix"] = classifier.error_matrix
 
         #obtain results produced through this classifier
-        statistics = inputs * node["error matrix"]
+        statistics = classifier(inputs)
         node["contingency"] = statistics
         #separate messages discarded & accepted by classifier
         node["discards"] = get_rejected(statistics)
@@ -321,7 +326,7 @@ def update_throughput(graph: nx.classes.digraph):
     graph = graph.copy()
     #call the recursive update function on the root node
     root = graph.graph["Root Node"]
-    #calculate the global rejection ratio
+    #calculate the global reduction ratio
     calc_rejection(graph)
     #propagate from root to leaves
     
