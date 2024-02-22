@@ -4,6 +4,7 @@ import pandas as pd
 import functools
 import metrics
 from classifier import *
+from collections import namedtuple
 
 """
 Determine if a node has an active classifier
@@ -345,12 +346,15 @@ def update_throughput(graph: nx.classes.digraph):
     
     return graph
     
+System = namedtuple("System", ["detectors", "triggers", "globals"]) 
+
 def dataframes_from_spreadsheet(filename: str):
     detectors = pd.read_excel(filename, sheet_name="Detectors")
     triggers = pd.read_excel(filename, sheet_name="Triggers")
     globals = pd.read_excel(filename, sheet_name="Global")
 
-    return detectors, triggers, globals
+    sys = System(detectors, triggers, globals)
+    return sys
 
 def graph_from_spreadsheet(filename: str, functions: dict):
     detectors, triggers, globals = dataframes_from_spreadsheet(filename)
