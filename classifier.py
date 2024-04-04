@@ -6,32 +6,6 @@ from scipy.optimize import minimize_scalar
 from scipy.interpolate import PchipInterpolator
 from scipy.integrate import quad
 
-class Classifier(ABC):
-    def __init__(self):
-        self.error_matrix = passing_node()
-
-    @abstractmethod
-    def solve_reduction(self):
-        pass
-
-    def __call__(self, inputs):
-        return inputs * self.error_matrix 
-
-"""
-Placeholder object for a node which doesn't classify (reject) data - only passes it
-"""
-class DummyClassifier(Classifier):
-    def __init__(self):
-        super().__init__()
-        self.reduction  = 0
-
-    def solve_reduction(self):
-        return
-    
-    def __call__(self, inputs):
-        return super()(inputs)
-
-
 """
 Error matrix representing a dummy classifier (no classification)
 """
@@ -72,6 +46,34 @@ def order_test(null_dist, pos_dist, selection: int = 401):
 
     return confusion
 
+class Classifier(ABC):
+    def __init__(self):
+        self.error_matrix = passing_node()
+
+    @abstractmethod
+    def solve_reduction(self):
+        pass
+
+    def __call__(self, inputs):
+        return inputs * self.error_matrix 
+
+"""
+Placeholder object for a node which doesn't classify (reject) data - only passes it
+"""
+class DummyClassifier(Classifier):
+    def __init__(self):
+        super().__init__()
+        self.reduction  = 0
+
+    def solve_reduction(self):
+        return
+    
+    def __call__(self, inputs):
+        return super().__call__(inputs)
+
+
+
+
 """
 Object to estimate the classification statistics of a processing node based on normal processes
 """
@@ -99,7 +101,7 @@ class GaussianClassifier(Classifier):
             self.active = True
 
             #distribution of Y = 0 (reject) given X (data)
-            self.false = lambda x: norm.cdf(x, loc=0.0, scale=varscale)
+            self.false = lambda x: norm.cdf(x, loc=0.0, scale=1.0)
             #distribution of Y = 1 (accept) given X (data)
             self.true = lambda x: norm.cdf(x, loc=skill, scale=varscale)
             #the distribution of scores depends on the input data to the classifier
@@ -108,7 +110,7 @@ class GaussianClassifier(Classifier):
             self.solve_reduction()
             
     def solve_reduction(self):
-        opt_fn = lambda x: np.abs(self.reduction - self.scores(x))
+        opt_fn = lambda x: np.abs(self.reduction - (1.0 - self.scores(x)))
         soln = minimize_scalar(opt_fn, bounds=(0.0, 20.0))
         if soln.success:
             self.threshold = soln.x
@@ -126,7 +128,7 @@ class GaussianClassifier(Classifier):
         self.error_matrix = np.array([[self.tn, self.fn], [self.fp, self.tp]])
         
     def __call__(self, inputs):
-        return super()(inputs)
+        return super().__call__(inputs)
     
 class L1TClassifier(Classifier):
     def __init__(self, reduction, n_samples: int = 10000):
@@ -188,6 +190,8 @@ class L1TClassifier(Classifier):
                                   self.muon_prctile, 
                                   self.egamma_prctile, 
                                   self.tau_prctile])
+        
+        self.solve_reduction()
 
 
     """
@@ -208,7 +212,7 @@ class L1TClassifier(Classifier):
     Generate a distribution of particles centered around the trigger threshold
     """
     def generate_exp(self):
-        p = np.random.uniform(size=(4))
+        p = self.rng.uniform(size=(4))
         jet = self.exp_generator(p[0], self.jet_l)
         muon = self.exp_generator(p[1], self.muon_l)
         egamma = self.exp_generator(p[2], self.egamma_l)
@@ -227,7 +231,7 @@ class L1TClassifier(Classifier):
     Generate particles from an event which doesn't trigger L1T
     """
     def generate_null(self):
-        p = self.rng.random.uniform(size=(4)) * self.prctiles
+        p = self.rng.uniform(size=(4)) * self.prctiles
         jet = self.exp_generator(p[0], self.jet_l)
         muon = self.exp_generator(p[1], self.muon_l)
         egamma = self.exp_generator(p[2], self.egamma_l)
@@ -275,7 +279,7 @@ class L1TClassifier(Classifier):
 
         jet = self.exp_generator(p_jet, self.jet_l)
         muon = self.exp_generator(p_muon, self.muon_l)
-        egamma = self.exp_generator(p_egamma, self.gamma_l)
+        egamma = self.exp_generator(p_egamma, self.egamma_l)
         tau = self.exp_generator(p_tau, self.tau_l)
 
         e = np.array([jet, muon, egamma,  tau,])
@@ -293,7 +297,10 @@ class L1TClassifier(Classifier):
         #determine how often the ordering of a set of samples is correct
         null_samples = np.stack([self.generate_null() for i in range(self.n_samples)])
         pos_samples = np.stack([self.generate_positive() for i in range(self.n_samples)])
-        run_test = lambda: order_test(null_samples, pos_samples, self.reduction)
+        run_test = lambda: order_test(null_samples, pos_samples, (int(1/self.reduction) + 1))
         perf = np.sum([run_test() for i in range(n_samples)], axis=0)
         stats = lambda c: c / np.sum(c, axis=0)
         self.error_matrix = stats(perf)
+
+    def __call__(self, inputs):
+        return super().__call__(inputs)
