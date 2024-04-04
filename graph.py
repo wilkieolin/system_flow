@@ -262,7 +262,7 @@ def propagate_statistics(graph: nx.classes.digraph, node_name: str):
         inputs = functools.reduce(lambda x, y: x + y, inputs) / n_previous
         #construct the classifier model for this node
         node["input rate"] = np.sum(inputs)
-        classifier = Classifier(*node["classifier properties"], inputs=inputs)
+        classifier = GaussianClassifier(*node["classifier properties"], inputs=inputs)
         node["classifier"] = classifier
         node["error matrix"] = classifier.error_matrix
 
