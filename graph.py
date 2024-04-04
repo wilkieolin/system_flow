@@ -12,7 +12,7 @@ Determine if a node has an active classifier
 def has_classifier(node):
     #determine if it's a dummy classifier
     if "classifier" in node.keys():
-        return type(node["classifier"]) is Classifier
+        return issubclass(type(node["classifier"]), Classifier)
     #determine if the classifier is active
     else:
         return node["classifier"].active
@@ -104,8 +104,12 @@ def triggers(trigger_data: pd.DataFrame):
         trigger = trigger_data.iloc[i]
         name = trigger["Name"]
         rr = trigger["Reduction Ratio"]
+        classifier_type = trigger["Classifier"]
         reduction = ratio_to_reduction(rr)
-        classifier_properties = [reduction, trigger["Skill mean"], trigger["Skill variance"]]
+        classifier_properties = {"reduction": reduction, 
+                                 "type": classifier_type, 
+                                 "parameters": [trigger["Skill mean"], trigger["Skill variance"]]
+        }
 
         node_properties = {
             "classifier properties": classifier_properties,
@@ -262,7 +266,15 @@ def propagate_statistics(graph: nx.classes.digraph, node_name: str):
         inputs = functools.reduce(lambda x, y: x + y, inputs) / n_previous
         #construct the classifier model for this node
         node["input rate"] = np.sum(inputs)
-        classifier = GaussianClassifier(*node["classifier properties"], inputs=inputs)
+        classifier_props = node["classifier properties"]
+        if classifier_props["type"] == "Gaussian":
+            classifier = GaussianClassifier(classifier_props["reduction"], *classifier_props["parameters"], inputs=inputs)
+        elif classifier_props["type"] == "L1T":
+            classifier = L1TClassifier(classifier_props["reduction"])
+        else:
+            print("Unrecognized classifier type, substituting dummy")
+            classifier = DummyClassifier()
+
         node["classifier"] = classifier
         node["error matrix"] = classifier.error_matrix
 

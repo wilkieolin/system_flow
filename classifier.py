@@ -55,7 +55,8 @@ class Classifier(ABC):
         pass
 
     def __call__(self, inputs):
-        return inputs * self.error_matrix 
+        mat = inputs * self.error_matrix
+        return mat.astype("int")
 
 """
 Placeholder object for a node which doesn't classify (reject) data - only passes it
@@ -110,7 +111,7 @@ class GaussianClassifier(Classifier):
             self.solve_reduction()
             
     def solve_reduction(self):
-        opt_fn = lambda x: np.abs(self.reduction - (1.0 - self.scores(x)))
+        opt_fn = lambda x: np.abs(self.reduction - self.scores(x))
         soln = minimize_scalar(opt_fn, bounds=(0.0, 20.0))
         if soln.success:
             self.threshold = soln.x
@@ -297,7 +298,7 @@ class L1TClassifier(Classifier):
         #determine how often the ordering of a set of samples is correct
         null_samples = np.stack([self.generate_null() for i in range(self.n_samples)])
         pos_samples = np.stack([self.generate_positive() for i in range(self.n_samples)])
-        run_test = lambda: order_test(null_samples, pos_samples, (int(1/self.reduction) + 1))
+        run_test = lambda: order_test(null_samples, pos_samples, (int(1/(1 - self.reduction) + 1)))
         perf = np.sum([run_test() for i in range(n_samples)], axis=0)
         stats = lambda c: c / np.sum(c, axis=0)
         self.error_matrix = stats(perf)
