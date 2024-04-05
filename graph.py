@@ -111,16 +111,26 @@ def triggers(trigger_data: pd.DataFrame):
                                  "parameters": [trigger["Skill mean"], trigger["Skill variance"]]
         }
 
+        if classifier_properties["type"] == "Gaussian":
+            classifier = GaussianClassifier(classifier_properties["reduction"], *classifier_properties["parameters"])
+        elif classifier_properties["type"] == "L1T":
+            classifier = L1TClassifier(classifier_properties["reduction"])
+        else:
+            classifier = DummyClassifier()
+
         node_properties = {
-            "classifier properties": classifier_properties,
             "type": "processor",
             "reduction ratio": rr,
             "reduction": reduction,
+            "classifier": classifier,
+            "classifier properties": classifier_properties,
             "data reduction": 1.0 - trigger["Compression"],
             "op efficiency": trigger["Op Efficiency (J/op)"],
             "sample data": trigger["Data (bytes)"],
             "complexity": lambda x: x,
         }
+        
+        
         triggers.append((name, node_properties))
 
         output = trigger["Output"]
@@ -242,7 +252,7 @@ def propagate_statistics(graph: nx.classes.digraph, node_name: str):
         #determine the number of true and false samples which will propagate out
         positives = node["sample rate"] / node["global ratio"]
         negatives = node["sample rate"] - positives
-        node["contingency"] = np.array([[0, 0], [negatives, positives]])
+        node["contingency"] = np.array([[0, 0], [negatives, positives]]).astype("int")
         node["input rate"] = node["sample rate"]
         node["output rate"] = node["sample rate"]
         output = get_passed(node["contingency"])
@@ -263,23 +273,17 @@ def propagate_statistics(graph: nx.classes.digraph, node_name: str):
             graph.edges[e]["statistics"] = inputs[i]
         
         #take the average over the input nodes to collate inputs into a single file
+        print(node_name)
+        print(inputs)
         inputs = functools.reduce(lambda x, y: x + y, inputs) / n_previous
+        inputs = inputs.astype("int")
+        
         #construct the classifier model for this node
         node["input rate"] = np.sum(inputs)
-        classifier_props = node["classifier properties"]
-        if classifier_props["type"] == "Gaussian":
-            classifier = GaussianClassifier(classifier_props["reduction"], *classifier_props["parameters"], inputs=inputs)
-        elif classifier_props["type"] == "L1T":
-            classifier = L1TClassifier(classifier_props["reduction"])
-        else:
-            print("Unrecognized classifier type, substituting dummy")
-            classifier = DummyClassifier()
-
-        node["classifier"] = classifier
-        node["error matrix"] = classifier.error_matrix
-
+        
         #obtain results produced through this classifier
-        statistics = classifier(inputs)
+        statistics = node["classifier"](inputs)
+        node["error matrix"] = node["classifier"].error_matrix
         node["contingency"] = statistics
         #separate messages discarded & accepted by classifier
         node["discards"] = get_rejected(statistics)

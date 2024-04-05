@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
-from scipy.stats import norm
+from scipy.stats import norm, permutation_test
 from scipy.optimize import minimize_scalar
 from scipy.interpolate import PchipInterpolator
 from scipy.integrate import quad
@@ -31,18 +31,14 @@ def reduction_to_ratio(reduction):
 def ratio_to_reduction(reduction_ratio):
     return 1.0 - 1.0 / reduction_ratio
 
-def order_test(null_dist, pos_dist, selection: int = 401):
-    idx_null = np.random.choice(np.arange(null_dist.shape[0]), selection - 1)
-    idx_pos = np.random.choice(np.arange(pos_dist.shape[0]), 1)
+def order_test(null_samples, pos_samples):
+    score = lambda x: np.sum(x[:,1,:], axis=1)
+    null_scores = score(null_samples)
+    pos_scores = score(pos_samples)
 
-    select = lambda x, idx: np.sum(x[idx,1,:], axis=1)
-    null_scores = select(null_dist, idx_null)
-    pos_score = select(pos_dist, idx_pos)
-
-    if np.all(pos_score > null_scores):
-        confusion = np.array([[selection - 1, 0], [0, 1]])
-    else:
-        confusion = np.array([[selection - 2, 1], [1, 0]])
+    p = np.mean(np.reshape(pos_scores, (1, -1)) > np.reshape(null_scores, (-1,1)))
+    error = 1 - p
+    confusion = np.array([[p, error], [error, p]])
 
     return confusion
 
@@ -79,7 +75,7 @@ class DummyClassifier(Classifier):
 Object to estimate the classification statistics of a processing node based on normal processes
 """
 class GaussianClassifier(Classifier):
-    def __init__(self, reduction, skill, varscale = 1.0, n = 1000, inputs = None):
+    def __init__(self, reduction, skill, varscale = 1.0, n = 1000):
         #if the reduction is zero, pass all data
         if reduction <= 0.0:
             self.reduction = 0.0
@@ -87,15 +83,6 @@ class GaussianClassifier(Classifier):
             self.error_matrix = passing_node()
         
         else:
-            #if there are no inputs provided, assume they match the ideal value (the reduction ratio)
-            if inputs is None:
-                self.n = n
-                self.neg, self.pos = reduction_to_samples(reduction, n)
-            #otherwise, they follow another distribution
-            else:
-                assert len(inputs) == 2, "Inputs provided must be number of falses and trues in a vector"
-                self.neg, self.pos = inputs
-                self.n = self.neg + self.pos
             self.reduction  = reduction
             self.skill = skill
             self.varscale = varscale
@@ -105,12 +92,19 @@ class GaussianClassifier(Classifier):
             self.false = lambda x: norm.cdf(x, loc=0.0, scale=1.0)
             #distribution of Y = 1 (accept) given X (data)
             self.true = lambda x: norm.cdf(x, loc=skill, scale=varscale)
-            #the distribution of scores depends on the input data to the classifier
-            self.scores = lambda x: (self.neg * self.false(x) + self.pos * self.true(x)) / (self.n)
-            #get the data selection threshold
-            self.solve_reduction()
             
-    def solve_reduction(self):
+    def solve_reduction(self, inputs):
+        if not self.active:
+            self.error_matrix = passing_node()
+            return
+        
+        assert len(inputs) == 2, "Inputs provided must be number of falses and trues in a vector"
+        self.neg, self.pos = inputs
+        self.n = self.neg + self.pos
+        
+        #the distribution of scores depends on the input data to the classifier
+        self.scores = lambda x: (self.neg * self.false(x) + self.pos * self.true(x)) / (self.n)
+
         opt_fn = lambda x: np.abs(self.reduction - self.scores(x))
         soln = minimize_scalar(opt_fn, bounds=(0.0, 20.0))
         if soln.success:
@@ -129,14 +123,16 @@ class GaussianClassifier(Classifier):
         self.error_matrix = np.array([[self.tn, self.fn], [self.fp, self.tp]])
         
     def __call__(self, inputs):
+        self.solve_reduction(inputs)
         return super().__call__(inputs)
     
 class L1TClassifier(Classifier):
-    def __init__(self, reduction, n_samples: int = 10000):
+    def __init__(self, reduction, skill_boost: float = 0.0, n_samples: int = 10000):
         super().__init__()
         self.reduction = reduction
         self.rng = np.random.default_rng()
         self.n_samples = n_samples
+        self.skill_boost = skill_boost
 
         self.triggers = ["Jet", "Muon", "EGamma", "Tau"]
         #read trigger data from external files
@@ -192,7 +188,9 @@ class L1TClassifier(Classifier):
                                   self.egamma_prctile, 
                                   self.tau_prctile])
         
-        self.solve_reduction()
+        #generate sample distributions
+        self.null_samples = np.stack([self.generate_null() for i in range(self.n_samples)])
+        self.pos_samples = np.stack([self.generate_positive() for i in range(self.n_samples)])
 
 
     """
@@ -206,8 +204,9 @@ class L1TClassifier(Classifier):
         fit = lambda l: np.abs(self.egamma_rate - quad(lambda x: self.exp_dist(x, l) * interpolator(x), np.min(xs), np.max(xs))[0])
         soln = minimize_scalar(fit, bounds = bounds, method="bounded")
         l = soln.x
+        fit = lambda x: np.clip(interpolator(x), 0.0, 1.0)
 
-        return interpolator, l, soln
+        return fit, l, soln
     
     """
     Generate a distribution of particles centered around the trigger threshold
@@ -294,14 +293,14 @@ class L1TClassifier(Classifier):
         
         return res
     
-    def solve_reduction(self, n_samples: int = 1001):
+    def solve_reduction(self, inputs, n_samples: int = 1001):
+        assert len(inputs) == 2, "Inputs provided must be number of falses and trues in a vector"
+        self.neg, self.pos = inputs
+        self.n = self.neg + self.pos
+
         #determine how often the ordering of a set of samples is correct
-        null_samples = np.stack([self.generate_null() for i in range(self.n_samples)])
-        pos_samples = np.stack([self.generate_positive() for i in range(self.n_samples)])
-        run_test = lambda: order_test(null_samples, pos_samples, (int(1/(1 - self.reduction) + 1)))
-        perf = np.sum([run_test() for i in range(n_samples)], axis=0)
-        stats = lambda c: c / np.sum(c, axis=0)
-        self.error_matrix = stats(perf)
+        self.error_matrix = order_test(self.null_samples, self.pos_samples + self.skill_boost)
 
     def __call__(self, inputs):
+        self.solve_reduction(inputs)
         return super().__call__(inputs)
