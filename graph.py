@@ -273,8 +273,6 @@ def propagate_statistics(graph: nx.classes.digraph, node_name: str):
             graph.edges[e]["statistics"] = inputs[i]
         
         #take the average over the input nodes to collate inputs into a single file
-        print(node_name)
-        print(inputs)
         inputs = functools.reduce(lambda x, y: x + y, inputs) / n_previous
         inputs = inputs.astype("int")
         

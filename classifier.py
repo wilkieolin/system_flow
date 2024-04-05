@@ -297,9 +297,27 @@ class L1TClassifier(Classifier):
         assert len(inputs) == 2, "Inputs provided must be number of falses and trues in a vector"
         self.neg, self.pos = inputs
         self.n = self.neg + self.pos
+        #how many samples are allowed out?
+        n_out = self.n * self.reduction
 
+        ordering_error = order_test(self.null_samples, self.pos_samples + self.skill_boost)
+        ordering = inputs * ordering_error
+        predictions = np.sum(ordering, axis=1)
+
+        #if we have to cut down the outputs, randomly select from the positive cases
+        if n_out < predictions[1]:
+            cutoff = n_out / predictions[1]
+            rejected = get_passed(ordering) * cutoff
+            contingency = np.stack((get_rejected(ordering) + rejected, get_passed(ordering) - rejected), axis=0)
+        #otherwise, we have to accept more negatives into the output
+        else:
+            cutoff = (n_out - predictions[1]) / predictions[0]
+            accepted = get_rejected(ordering) * cutoff
+            contingency = np.stack((get_rejected(ordering) - accepted, get_passed(ordering) + accepted), axis=0)
+
+        self.contingency = contingency
         #determine how often the ordering of a set of samples is correct
-        self.error_matrix = order_test(self.null_samples, self.pos_samples + self.skill_boost)
+        self.error_matrix = contingency / np.sum(contingency, axis=0)
 
     def __call__(self, inputs):
         self.solve_reduction(inputs)
