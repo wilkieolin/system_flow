@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
-from scipy.stats import norm, permutation_test
+from scipy.stats import norm, ecdf
 from scipy.optimize import minimize_scalar
 from scipy.interpolate import PchipInterpolator
 from scipy.integrate import quad
@@ -18,6 +18,9 @@ def get_rejected(matrix):
 
 def get_passed(matrix):
     return matrix[1,:]
+
+def contingency_to_error(matrix):
+    return matrix / np.sum(matrix, axis=0)
 
 def reduction_to_samples(reduction, n=1000):
     pos = n * reduction
@@ -106,7 +109,7 @@ class GaussianClassifier(Classifier):
         self.scores = lambda x: (self.neg * self.false(x) + self.pos * self.true(x)) / (self.n)
 
         opt_fn = lambda x: np.abs(self.reduction - self.scores(x))
-        soln = minimize_scalar(opt_fn, bounds=(0.0, 20.0))
+        soln = minimize_scalar(opt_fn, bounds=(0.0, 20.0), method="bounded")
         if soln.success:
             self.threshold = soln.x
         else:
@@ -191,6 +194,9 @@ class L1TClassifier(Classifier):
         #generate sample distributions
         self.null_samples = np.stack([self.generate_null() for i in range(self.n_samples)])
         self.pos_samples = np.stack([self.generate_positive() for i in range(self.n_samples)])
+        #and the scores for those samples
+        self.null_scores = np.sum(self.null_samples[:,1,:], axis=1)
+        self.pos_scores = np.sum(self.pos_samples[:,1,:], axis=1)
 
 
     """
@@ -293,31 +299,34 @@ class L1TClassifier(Classifier):
         
         return res
     
-    def solve_reduction(self, inputs, n_samples: int = 1001):
+    def solve_reduction(self, inputs):
         assert len(inputs) == 2, "Inputs provided must be number of falses and trues in a vector"
-        self.neg, self.pos = inputs
-        self.n = self.neg + self.pos
+        neg, pos = inputs
+        n = neg + pos
         #how many samples are allowed out?
-        n_out = self.n * self.reduction
+        n_out = n * (1 - self.reduction)
 
-        ordering_error = order_test(self.null_samples, self.pos_samples + self.skill_boost)
-        ordering = inputs * ordering_error
-        predictions = np.sum(ordering, axis=1)
+        self.negative = lambda x: ecdf(self.null_scores).cdf.evaluate(x)
+        self.positive = lambda x: ecdf(self.pos_scores).cdf.evaluate(x)
+        self.scores = lambda x: (neg * self.negative(x) + pos * self.positive(x)) / n
 
-        #if we have to cut down the outputs, randomly select from the positive cases
-        if n_out < predictions[1]:
-            cutoff = n_out / predictions[1]
-            rejected = get_passed(ordering) * cutoff
-            contingency = np.stack((get_rejected(ordering) + rejected, get_passed(ordering) - rejected), axis=0)
-        #otherwise, we have to accept more negatives into the output
+        opt_fn = lambda x: np.abs(self.reduction - self.scores(x))
+        soln = minimize_scalar(opt_fn, bounds=(0.0, 6.0), method="bounded")
+        if soln.success:
+            self.threshold = soln.x
         else:
-            cutoff = (n_out - predictions[1]) / predictions[0]
-            accepted = get_rejected(ordering) * cutoff
-            contingency = np.stack((get_rejected(ordering) - accepted, get_passed(ordering) + accepted), axis=0)
+            print("Solving for classification threshold failed:")
+            print("T:", self.pos, "F:", self.neg, "Ratio:", self.reduction)
+            self.threshold = 0.0
+            self.error_matrix = passing_node()
 
-        self.contingency = contingency
-        #determine how often the ordering of a set of samples is correct
-        self.error_matrix = contingency / np.sum(contingency, axis=0)
+        self.tn = self.negative(self.threshold)
+        self.fn = self.positive(self.threshold)
+        self.tp = (1.0 - self.positive(self.threshold))
+        self.fp = (1.0 - self.negative(self.threshold))
+
+        self.error_matrix = np.array([[self.tn, self.fn], [self.fp, self.tp]])
+
 
     def __call__(self, inputs):
         self.solve_reduction(inputs)
