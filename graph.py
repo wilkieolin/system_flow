@@ -105,25 +105,18 @@ def triggers(trigger_data: pd.DataFrame):
         name = trigger["Name"]
         rr = trigger["Reduction Ratio"]
         classifier_type = trigger["Classifier"]
-        reduction = ratio_to_reduction(rr)
-        classifier_properties = {"reduction": reduction, 
-                                 "type": classifier_type, 
-                                 "parameters": [trigger["Skill mean"], trigger["Skill variance"]]
-        }
 
-        if classifier_properties["type"] == "Gaussian":
-            classifier = GaussianClassifier(classifier_properties["reduction"], *classifier_properties["parameters"])
-        elif classifier_properties["type"] == "L1T":
-            classifier = L1TClassifier(classifier_properties["reduction"])
+        if classifier_type == "Gaussian":
+            classifier = GaussianClassifier(trigger["Skill mean"], trigger["Skill variance"])
+        elif classifier_type == "L1T":
+            classifier = L1TClassifier()
         else:
             classifier = DummyClassifier()
 
         node_properties = {
             "type": "processor",
             "reduction ratio": rr,
-            "reduction": reduction,
             "classifier": classifier,
-            "classifier properties": classifier_properties,
             "data reduction": 1.0 - trigger["Compression"],
             "op efficiency": trigger["Op Efficiency (J/op)"],
             "sample data": trigger["Data (bytes)"],
@@ -232,6 +225,7 @@ at the final node
 """
 def calc_rejection(graph: nx.classes.digraph):
     def inner(node):
+        #graph.nodes[node]["classifier"].reduction = 1 / graph.nodes[node]["reduction ratio"]
         downstream = list(nx.dfs_postorder_nodes(graph, node))
         ratios = [graph.nodes[n]["reduction ratio"] for n in downstream]
         total_reduction = functools.reduce(lambda x, y: x * y, ratios)
@@ -280,7 +274,8 @@ def propagate_statistics(graph: nx.classes.digraph, node_name: str):
         node["input rate"] = np.sum(inputs)
         
         #obtain results produced through this classifier
-        statistics = node["classifier"](inputs)
+        reduction = ratio_to_reduction(node["reduction ratio"])
+        statistics = node["classifier"](inputs, reduction)
         node["error matrix"] = node["classifier"].error_matrix
         node["contingency"] = statistics
         #separate messages discarded & accepted by classifier

@@ -50,10 +50,11 @@ class Classifier(ABC):
         self.error_matrix = passing_node()
 
     @abstractmethod
-    def solve_reduction(self):
+    def solve_reduction(self, reduction):
         pass
 
-    def __call__(self, inputs):
+    def __call__(self, inputs, reduction):
+        self.solve_reduction(inputs, reduction)
         mat = inputs * self.error_matrix
         return mat.astype("int")
 
@@ -63,41 +64,29 @@ Placeholder object for a node which doesn't classify (reject) data - only passes
 class DummyClassifier(Classifier):
     def __init__(self):
         super().__init__()
-        self.reduction  = 0
 
-    def solve_reduction(self):
+    def solve_reduction(self, inputs, reduction):
         return
     
-    def __call__(self, inputs):
-        return super().__call__(inputs)
-
-
+    def __call__(self, inputs, reduction):
+        return super().__call__(inputs, reduction)
 
 
 """
 Object to estimate the classification statistics of a processing node based on normal processes
 """
 class GaussianClassifier(Classifier):
-    def __init__(self, reduction, skill, varscale = 1.0, n = 1000):
-        #if the reduction is zero, pass all data
-        if reduction <= 0.0:
-            self.reduction = 0.0
-            self.active = False
-            self.error_matrix = passing_node()
-        
-        else:
-            self.reduction  = reduction
-            self.skill = skill
-            self.varscale = varscale
-            self.active = True
+    def __init__(self, skill, varscale = 1.0):
+        self.skill = skill
+        self.varscale = varscale
 
-            #distribution of Y = 0 (reject) given X (data)
-            self.false = lambda x: norm.cdf(x, loc=0.0, scale=1.0)
-            #distribution of Y = 1 (accept) given X (data)
-            self.true = lambda x: norm.cdf(x, loc=skill, scale=varscale)
+        #distribution of Y = 0 (reject) given X (data)
+        self.false = lambda x: norm.cdf(x, loc=0.0, scale=1.0)
+        #distribution of Y = 1 (accept) given X (data)
+        self.true = lambda x: norm.cdf(x, loc=skill, scale=varscale)
             
-    def solve_reduction(self, inputs):
-        if not self.active:
+    def solve_reduction(self, inputs, reduction):
+        if reduction == 0.0:
             self.error_matrix = passing_node()
             return
         
@@ -108,13 +97,13 @@ class GaussianClassifier(Classifier):
         #the distribution of scores depends on the input data to the classifier
         self.scores = lambda x: (self.neg * self.false(x) + self.pos * self.true(x)) / (self.n)
 
-        opt_fn = lambda x: np.abs(self.reduction - self.scores(x))
+        opt_fn = lambda x: np.abs(reduction - self.scores(x))
         soln = minimize_scalar(opt_fn, bounds=(0.0, 20.0), method="bounded")
         if soln.success:
             self.threshold = soln.x
         else:
-            print("Solving for classification threshold failed:")
-            print("T:", self.pos, "F:", self.neg, "Ratio:", self.reduction)
+            print("Solving for Gaussian classification threshold failed:")
+            print("T:", self.pos, "F:", self.neg, "Ratio:", reduction)
             self.threshold = 0.0
             self.error_matrix = passing_node()
 
@@ -125,14 +114,12 @@ class GaussianClassifier(Classifier):
 
         self.error_matrix = np.array([[self.tn, self.fn], [self.fp, self.tp]])
         
-    def __call__(self, inputs):
-        self.solve_reduction(inputs)
-        return super().__call__(inputs)
+    def __call__(self, inputs, reduction):
+        return super().__call__(inputs, reduction)
     
 class L1TClassifier(Classifier):
-    def __init__(self, reduction, skill_boost: float = 0.0, n_samples: int = 10000):
+    def __init__(self, skill_boost: float = 0.0, n_samples: int = 10000):
         super().__init__()
-        self.reduction = reduction
         self.rng = np.random.default_rng()
         self.n_samples = n_samples
         self.skill_boost = skill_boost
@@ -299,24 +286,24 @@ class L1TClassifier(Classifier):
         
         return res
     
-    def solve_reduction(self, inputs):
+    def solve_reduction(self, inputs, reduction):
         assert len(inputs) == 2, "Inputs provided must be number of falses and trues in a vector"
         neg, pos = inputs
         n = neg + pos
         #how many samples are allowed out?
-        n_out = n * (1 - self.reduction)
+        n_out = n * (1 - reduction)
 
         self.negative = lambda x: ecdf(self.null_scores).cdf.evaluate(x)
         self.positive = lambda x: ecdf(self.pos_scores).cdf.evaluate(x)
         self.scores = lambda x: (neg * self.negative(x) + pos * self.positive(x)) / n
 
-        opt_fn = lambda x: np.abs(self.reduction - self.scores(x))
+        opt_fn = lambda x: np.abs(reduction - self.scores(x))
         soln = minimize_scalar(opt_fn, bounds=(0.0, 6.0), method="bounded")
         if soln.success:
             self.threshold = soln.x
         else:
-            print("Solving for classification threshold failed:")
-            print("T:", self.pos, "F:", self.neg, "Ratio:", self.reduction)
+            print("Solving for L1T classification threshold failed:")
+            print("T:", self.pos, "F:", self.neg, "Ratio:", reduction)
             self.threshold = 0.0
             self.error_matrix = passing_node()
 
@@ -328,6 +315,5 @@ class L1TClassifier(Classifier):
         self.error_matrix = np.array([[self.tn, self.fn], [self.fp, self.tp]])
 
 
-    def __call__(self, inputs):
-        self.solve_reduction(inputs)
-        return super().__call__(inputs)
+    def __call__(self, inputs, reduction):
+        return super().__call__(inputs, reduction)
