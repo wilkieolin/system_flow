@@ -290,15 +290,13 @@ class L1TClassifier(Classifier):
         assert len(inputs) == 2, "Inputs provided must be number of falses and trues in a vector"
         neg, pos = inputs
         n = neg + pos
-        #how many samples are allowed out?
-        n_out = n * (1 - reduction)
 
         self.negative = lambda x: ecdf(self.null_scores).cdf.evaluate(x)
-        self.positive = lambda x: ecdf(self.pos_scores).cdf.evaluate(x)
+        self.positive = lambda x: ecdf(self.pos_scores + self.skill_boost).cdf.evaluate(x)
         self.scores = lambda x: (neg * self.negative(x) + pos * self.positive(x)) / n
 
         opt_fn = lambda x: np.abs(reduction - self.scores(x))
-        soln = minimize_scalar(opt_fn, bounds=(0.0, 6.0), method="bounded")
+        soln = minimize_scalar(opt_fn)
         if soln.success:
             self.threshold = soln.x
         else:
