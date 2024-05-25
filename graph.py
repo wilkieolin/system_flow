@@ -12,7 +12,7 @@ Determine if a node has an active classifier
 def has_classifier(node):
     #determine if it's a dummy classifier
     if "classifier" in node.keys():
-        return issubclass(type(node["classifier"]), Classifier)
+        return not issubclass(type(node["classifier"]), DummyClassifier)
     #determine if the classifier is active
     else:
         return node["classifier"].active
@@ -30,6 +30,26 @@ def downstream_classifier(graph, node):
             return has_classifier(graph.nodes[start]) + functools.reduce(lambda x, y: x + y, map(traverse, down))
         
     return traverse(node) > 1
+
+"""
+Return the amount of energy expended by the system to reach the current node
+"""
+def upstream_energy(graph, node):
+    def get_energy(node):
+        if "energy" in node.keys():
+            return node["energy"]
+        else:
+            return 0.0
+    
+    def traverse(start):
+        up = list(graph.predecessors(start))
+
+        if len(up) == 0:
+            return get_energy(graph.nodes[start])
+        else:
+            return get_energy(graph.nodes[start]) + functools.reduce(lambda x, y: x + y, map(traverse, up))
+    
+    return traverse(node)
 
 """
 Find the nodes in a graph with active classifiers
@@ -59,6 +79,16 @@ def pipeline_contingency(graph):
 
     return contingency
     
+def quantify_error_cost(graph):
+    #the cost of a true positive is the cost to get to the final node
+    positive = upstream_energy(graph, graph.graph["Root Node"])
+    #the cost of a true negative is the average energy for a discarded message
+    classifiers = active_classifiers(graph)
+    energy = [upstream_energy(graph, c) for c in classifiers]
+    negatives = [np.sum(graph.nodes[c]["discards"]) for c in classifiers]
+    negative = np.average(energy, weights=negatives)
+
+    return (negative, positive)
 
 """
 Return nodes and edges from a dataframe representing the system's data sources (detectors)
