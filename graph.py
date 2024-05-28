@@ -140,6 +140,8 @@ def triggers(trigger_data: pd.DataFrame):
             classifier = GaussianClassifier(trigger["Skill mean"], trigger["Skill variance"])
         elif classifier_type == "L1T":
             classifier = L1TClassifier()
+        elif classifier_type == "HLT":
+            classifier = HLTClassifier()
         else:
             classifier = DummyClassifier()
 
