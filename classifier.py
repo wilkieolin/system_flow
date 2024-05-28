@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
+from models import *
 from scipy.stats import norm, ecdf
 from scipy.optimize import minimize_scalar
 from scipy.interpolate import PchipInterpolator
@@ -206,10 +207,10 @@ class L1TClassifier(Classifier):
     """
     def generate_exp(self):
         p = self.rng.uniform(size=(4))
-        jet = self.exp_generator(p[0], self.jet_l)
-        muon = self.exp_generator(p[1], self.muon_l)
-        egamma = self.exp_generator(p[2], self.egamma_l)
-        tau = self.exp_generator(p[3], self.tau_l)
+        jet = exp_generator(p[0], self.jet_l)
+        muon = exp_generator(p[1], self.muon_l)
+        egamma = exp_generator(p[2], self.egamma_l)
+        tau = exp_generator(p[3], self.tau_l)
         
         e = np.array([jet, muon, egamma, tau])
         z = np.array([self.jet_fit(e[0]),
@@ -225,10 +226,10 @@ class L1TClassifier(Classifier):
     """
     def generate_null(self):
         p = self.rng.uniform(size=(4)) * self.prctiles
-        jet = self.exp_generator(p[0], self.jet_l)
-        muon = self.exp_generator(p[1], self.muon_l)
-        egamma = self.exp_generator(p[2], self.egamma_l)
-        tau = self.exp_generator(p[3], self.tau_l)
+        jet = exp_generator(p[0], self.jet_l)
+        muon = exp_generator(p[1], self.muon_l)
+        egamma = exp_generator(p[2], self.egamma_l)
+        tau = exp_generator(p[3], self.tau_l)
 
         e = np.array([jet, muon, egamma, tau])
         z = np.array([self.jet_fit(e[0]),
@@ -270,10 +271,10 @@ class L1TClassifier(Classifier):
         p_egamma = transform_p(self.egamma_prctile, trig_egamma)
         p_tau = transform_p(self.tau_prctile, trig_tau)
 
-        jet = self.exp_generator(p_jet, self.jet_l)
-        muon = self.exp_generator(p_muon, self.muon_l)
-        egamma = self.exp_generator(p_egamma, self.egamma_l)
-        tau = self.exp_generator(p_tau, self.tau_l)
+        jet = exp_generator(p_jet, self.jet_l)
+        muon = exp_generator(p_muon, self.muon_l)
+        egamma = exp_generator(p_egamma, self.egamma_l)
+        tau = exp_generator(p_tau, self.tau_l)
 
         e = np.array([jet, muon, egamma,  tau,])
         z = np.array([self.jet_fit(e[0]),
