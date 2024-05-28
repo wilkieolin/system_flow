@@ -71,17 +71,3 @@ def find_turnon(fit, bracket):
     opt_fn = lambda x: np.abs(0.5 - fit(x))
     soln = minimize_scalar(opt_fn, bracket=bracket)
     return soln
-
-def fit_trigger(data, empirical_rate, solver_bounds):
-    #extract the dynamic range of momenta for the trigger
-    xs = data_range(data["momentum"])
-    #use a linear interpolation to fit the efficiency curve
-    efficiency_fit = lambda x: hard_bounds(x, interp1d(data["momentum"], data[" efficiency"]), xs)
-    #estimate the mean proportion of objects a trigger will activate on given an exponential input distribution of objects
-    xs2 = expanded_range(xs)
-    trigger_rate = lambda l: quad(lambda x: exp_dist(x, l) * efficiency_fit(x), np.min(xs2), np.max(xs2))[0]
-    #calculate the gap between that and the empirical rate
-    trigger_error = lambda l: np.abs(empirical_rate - trigger_rate(l))
-    #minimize the gap
-    soln = minimize_scalar(trigger_error, bounds = solver_bounds, method="bounded")
-    return efficiency_fit, soln

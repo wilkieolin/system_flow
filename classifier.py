@@ -119,7 +119,7 @@ class GaussianClassifier(Classifier):
         return super().__call__(inputs, reduction)
     
 class L1TClassifier(Classifier):
-    def __init__(self, skill_boost: float = 0.0, n_samples: int = 50000):
+    def __init__(self, skill_boost: float = 0.0, n_samples: int = 10000):
         super().__init__()
         self.rng = np.random.default_rng()
         self.n_samples = n_samples
@@ -185,6 +185,8 @@ class L1TClassifier(Classifier):
         #and the scores for those samples
         self.null_scores = np.sum(self.null_samples[:,1,:], axis=1)
         self.pos_scores = np.sum(self.pos_samples[:,1,:], axis=1)
+
+        self.negative = lambda x: ecdf(self.null_scores).cdf.evaluate(x)
 
 
     """
@@ -291,8 +293,6 @@ class L1TClassifier(Classifier):
         assert len(inputs) == 2, "Inputs provided must be number of falses and trues in a vector"
         neg, pos = inputs
         n = neg + pos
-
-        self.negative = lambda x: ecdf(self.null_scores).cdf.evaluate(x)
         self.positive = lambda x: ecdf(self.pos_scores + self.skill_boost).cdf.evaluate(x)
         self.scores = lambda x: (neg * self.negative(x) + pos * self.positive(x)) / n
 
@@ -302,6 +302,155 @@ class L1TClassifier(Classifier):
             self.threshold = soln.x
         else:
             print("Solving for L1T classification threshold failed:")
+            print("T:", self.pos, "F:", self.neg, "Ratio:", reduction)
+            self.threshold = 0.0
+            self.error_matrix = passing_node()
+
+        self.tn = self.negative(self.threshold)
+        self.fn = self.positive(self.threshold)
+        self.tp = (1.0 - self.positive(self.threshold))
+        self.fp = (1.0 - self.negative(self.threshold))
+
+        self.error_matrix = np.array([[self.tn, self.fn], [self.fp, self.tp]])
+
+
+    def __call__(self, inputs, reduction):
+        return super().__call__(inputs, reduction)
+    
+class HLTClassifier(Classifier):
+    def __init__(self, skill_boost: float = 0.0, n_samples: int = 10000):
+        super().__init__()
+        self.rng = np.random.default_rng()
+        self.n_samples = n_samples
+        self.skill_boost = skill_boost
+
+        self.paths = ["B2G", "Higgs", "Muon", "SUSY", "tracking", "tau"]
+        #read trigger data from external files
+        #efficiency curves
+        # data taken and fitted from approved CMS 2018 Data:
+        # https://twiki.cern.ch/twiki/bin/view/CMSPublic/HighLevelTriggerRunIIResults
+        b2g = pd.read_csv("hlt_data/B2G.csv")
+        higgs = pd.read_csv("hlt_data/higgs.csv")
+        muon = pd.read_csv("hlt_data/Muon.csv")
+        susy = pd.read_csv("hlt_data/SUSY.csv")
+        tracking = pd.read_csv("hlt_data/tracking.csv")
+        tau = pd.read_csv("hlt_data/tau.csv")
+
+        #trigger rates
+        # B2G, higgs, muon, susy, tracking, tau
+        # (split objects between muon, tracking, and tau)
+        # https://twiki.cern.ch/twiki/bin/view/CMSPublic/HLTplots2018Rates
+        rates = np.array([96, 235, 202/3, 189, 202/3, 202/3])
+        rates_norm = rates / np.sum(rates)
+
+        self.b2g_rate, self.higgs_rate, self.muon_rate, self.susy_rate, self.tracking_rate, self.tau_rate = rates_norm
+        
+        #fit the experimental distribution of objects to the path efficiency data
+        b2g_eff, b2g_soln = self.fit_trigger(b2g, self.b2g_rate, [0.0010, 0.0050])
+        b2g_turnon = find_turnon(b2g_eff, (200, 600))
+
+        higgs_eff, higgs_soln = self.fit_trigger(higgs, self.higgs_rate, [0.0001, 0.0080])
+        higgs_turnon = find_turnon(higgs_eff, (200, 600))
+
+        muon_eff, muon_soln = self.fit_trigger(muon, self.muon_rate, [0.0001, 0.0080])
+        muon_turnon = find_turnon(muon_eff, (0, 50))
+
+        susy_eff, susy_soln = self.fit_trigger(susy, self.susy_rate, [0.0001, 0.0080])
+        susy_turnon = find_turnon(susy_eff, (100, 120))
+
+        tracking_eff, tracking_soln = self.fit_trigger(tracking, self.tracking_rate, [0.0001, 0.0080])
+        tracking_turnon = find_turnon(tracking_eff, (0, 10))
+
+        tau_eff, tau_soln = self.fit_trigger(tau, self.tau_rate, [0.0001, 0.0080])
+        tau_turnon = find_turnon(tau_eff, (0, 40))
+
+        b2g_threshold = b2g_turnon.x
+        higgs_threshold = higgs_turnon.x
+        muon_threshold = muon_turnon.x
+        susy_threshold = susy_turnon.x
+        tracking_threshold = 2 #round up tracking to the more reasonable design value of 2 GeV
+        tau_threshold = tau_turnon.x
+
+        #find the percentile of measurements above median acceptance level
+        b2g_prctile = exp_cdf(b2g_threshold, b2g_soln.x)
+        higgs_prctile = exp_cdf(higgs_threshold, higgs_soln.x)
+        muon_prctile = exp_cdf(muon_threshold, muon_soln.x)
+        susy_prctile = exp_cdf(susy_threshold, susy_soln.x)
+        tracking_prctile = exp_cdf(tracking_threshold, tracking_soln.x)
+        tau_prctile = exp_cdf(tau_threshold, tau_soln.x) 
+
+        #store these results for use in estimating classifier performance
+        self.effiencies = [b2g_eff, higgs_eff, muon_eff, susy_eff, tracking_eff, tau_eff]
+        self.fits = [b2g_soln.x, higgs_soln.x, muon_soln.x, susy_soln.x, tracking_soln.x, tau_soln.x]
+        self.thresholds = np.array([b2g_threshold, higgs_threshold, muon_threshold, susy_threshold, tracking_threshold, tau_threshold])
+        self.prctiles = np.array([b2g_prctile, higgs_prctile, muon_prctile, susy_prctile, tracking_prctile, tau_prctile])
+
+
+        #trigger thresholds
+        self.jet_threshold = self.rates["Jet Threshold"][0] 
+        self.muon_threshold = self.rates["Muon Threshold"][0] 
+        self.egamma_threshold = self.rates["Egamma Threshold"][0] 
+        self.tau_threshold = self.rates["Tau Threshold"][0] 
+        self.thresholds = np.array([self.jet_threshold, 
+                                    self.muon_threshold, 
+                                    self.egamma_threshold, 
+                                    self.tau_threshold])
+        
+        #generate positive and null score distributions
+        self.null_evts = np.stack([self.generate_null() for i in range(n_samples)])
+        self.pos_evts = np.stack([self.generate_positive() for i in range(n_samples)])
+
+        self.null_scores = self.null_evts[:,2]
+        self.pos_scores = self.pos_evts[:,2]
+
+        self.negative = lambda x: ecdf(self.null_scores).cdf.evaluate(x)
+        
+    def generate_null(self):
+        #take a random trigger path
+        path = np.random.choice(np.arange(len(self.thresholds)), p = self.rates_norm)
+        p = np.random.uniform() * self.prctiles[path]
+        l = self.fits[path]
+        e = exp_generator(p, l)
+        z = self.effiencies[path](e)
+        
+        return path, e, z
+    
+    def generate_positive(self):
+        #take a random trigger path
+        path = np.random.choice(np.arange(len(self.thresholds)), p = self.rates_norm)
+        p = 1.0 - np.random.uniform() * self.prctiles[path]
+        l = self.fits[path]
+        e = exp_generator(p, l)
+        z = self.effiencies[path](e)
+        
+        return path, e, z
+    
+    def fit_trigger(self, data, empirical_rate, solver_bounds):
+        #extract the dynamic range of momenta for the trigger
+        xs = data_range(data["momentum"])
+        #use a linear interpolation to fit the efficiency curve
+        efficiency_fit = lambda x: hard_bounds(x, interp1d(data["momentum"], data[" efficiency"]), xs)
+        #estimate the mean proportion of objects a trigger will activate on given an exponential input distribution of objects
+        xs2 = expanded_range(xs)
+        trigger_rate = lambda l: quad(lambda x: exp_dist(x, l) * efficiency_fit(x), np.min(xs2), np.max(xs2))[0]
+        #calculate the gap between that and the empirical rate
+        trigger_error = lambda l: np.abs(empirical_rate - trigger_rate(l))
+        #minimize the gap
+        soln = minimize_scalar(trigger_error, bounds = solver_bounds, method="bounded")
+        return efficiency_fit, soln
+    
+    def solve_reduction(self, inputs, reduction):
+        assert len(inputs) == 2, "Inputs provided must be number of falses and trues in a vector"
+        neg, pos = inputs
+        n = neg + pos
+        self.scores = lambda x: (neg * self.negative(x) + pos * self.positive(x)) / n
+
+        opt_fn = lambda x: np.abs(reduction - self.scores(x))
+        soln = minimize_scalar(opt_fn)
+        if soln.success:
+            self.threshold = soln.x
+        else:
+            print("Solving for HLT classification threshold failed:")
             print("T:", self.pos, "F:", self.neg, "Ratio:", reduction)
             self.threshold = 0.0
             self.error_matrix = passing_node()
