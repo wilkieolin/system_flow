@@ -340,10 +340,10 @@ class HLTClassifier(Classifier):
         # B2G, higgs, muon, susy, tracking, tau
         # (split objects between muon, tracking, and tau)
         # https://twiki.cern.ch/twiki/bin/view/CMSPublic/HLTplots2018Rates
-        rates = np.array([96, 235, 202/3, 189, 202/3, 202/3])
-        rates_norm = rates / np.sum(rates)
+        self.rates = np.array([96, 235, 202/3, 189, 202/3, 202/3])
+        self.rates_norm = self.rates / np.sum(self.rates)
 
-        self.b2g_rate, self.higgs_rate, self.muon_rate, self.susy_rate, self.tracking_rate, self.tau_rate = rates_norm
+        self.b2g_rate, self.higgs_rate, self.muon_rate, self.susy_rate, self.tracking_rate, self.tau_rate = self.rates_norm
         
         #fit the experimental distribution of objects to the path efficiency data
         b2g_eff, b2g_soln = self.fit_trigger(b2g, self.b2g_rate, [0.0010, 0.0050])
@@ -359,7 +359,7 @@ class HLTClassifier(Classifier):
         susy_turnon = find_turnon(susy_eff, (100, 120))
 
         tracking_eff, tracking_soln = self.fit_trigger(tracking, self.tracking_rate, [0.0001, 0.0080])
-        tracking_turnon = find_turnon(tracking_eff, (0, 10))
+        #tracking_turnon = find_turnon(tracking_eff, (0, 10))
 
         tau_eff, tau_soln = self.fit_trigger(tau, self.tau_rate, [0.0001, 0.0080])
         tau_turnon = find_turnon(tau_eff, (0, 40))
@@ -384,17 +384,6 @@ class HLTClassifier(Classifier):
         self.fits = [b2g_soln.x, higgs_soln.x, muon_soln.x, susy_soln.x, tracking_soln.x, tau_soln.x]
         self.thresholds = np.array([b2g_threshold, higgs_threshold, muon_threshold, susy_threshold, tracking_threshold, tau_threshold])
         self.prctiles = np.array([b2g_prctile, higgs_prctile, muon_prctile, susy_prctile, tracking_prctile, tau_prctile])
-
-
-        #trigger thresholds
-        self.jet_threshold = self.rates["Jet Threshold"][0] 
-        self.muon_threshold = self.rates["Muon Threshold"][0] 
-        self.egamma_threshold = self.rates["Egamma Threshold"][0] 
-        self.tau_threshold = self.rates["Tau Threshold"][0] 
-        self.thresholds = np.array([self.jet_threshold, 
-                                    self.muon_threshold, 
-                                    self.egamma_threshold, 
-                                    self.tau_threshold])
         
         #generate positive and null score distributions
         self.null_evts = np.stack([self.generate_null() for i in range(n_samples)])
@@ -443,6 +432,7 @@ class HLTClassifier(Classifier):
         assert len(inputs) == 2, "Inputs provided must be number of falses and trues in a vector"
         neg, pos = inputs
         n = neg + pos
+        self.positive = lambda x: ecdf(self.pos_scores + self.skill_boost).cdf.evaluate(x)
         self.scores = lambda x: (neg * self.negative(x) + pos * self.positive(x)) / n
 
         opt_fn = lambda x: np.abs(reduction - self.scores(x))
