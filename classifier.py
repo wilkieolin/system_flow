@@ -119,7 +119,7 @@ class GaussianClassifier(Classifier):
         return super().__call__(inputs, reduction)
     
 class L1TClassifier(Classifier):
-    def __init__(self, skill_boost: float = 0.0, n_samples: int = 10000):
+    def __init__(self, skill_boost: float = 0.0, n_samples: int = 50000):
         super().__init__()
         self.rng = np.random.default_rng()
         self.n_samples = n_samples
@@ -318,7 +318,7 @@ class L1TClassifier(Classifier):
         return super().__call__(inputs, reduction)
     
 class HLTClassifier(Classifier):
-    def __init__(self, skill_boost: float = 0.0, n_samples: int = 10000):
+    def __init__(self, skill_boost: float = 0.0, n_samples: int = 50000):
         super().__init__()
         self.rng = np.random.default_rng()
         self.n_samples = n_samples
