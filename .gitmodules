@@ -1,0 +1,3 @@
+[submodule "microprocessor-trend-data"]
+	path = microprocessor-trend-data
+	url = https://github.com/karlrupp/microprocessor-trend-data
