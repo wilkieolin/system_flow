@@ -52,6 +52,34 @@ def upstream_energy(graph, node):
     return traverse(node)
 
 """
+Return the latency required to route to the current node
+"""
+def propagate_latency(graph, node):
+    def arrival_latency(predecessors):
+        latencies = [graph.nodes[n]["routing latency"] for n in predecessors]
+        if len(latencies) > 0:
+            latency = np.max(latencies)
+        else:
+            latency = 0.0
+        
+        return latency
+    
+    def traverse(start):
+        up = list(graph.predecessors(start))
+        this_node = graph.nodes[start]
+        processing_latency = this_node["op latency"] * this_node["parallelism"](this_node["ops"])
+
+        if len(up) == 0:
+            message_time = processing_latency
+        else:
+            message_time = processing_latency + arrival_latency(up) + np.max(list(map(traverse, up)))
+        this_node["message time"] = message_time
+        return message_time
+
+    traverse(node)
+    return
+
+"""
 Find the nodes in a graph with active classifiers
 """
 def active_classifiers(graph):
@@ -102,18 +130,22 @@ def detectors(detector_data: pd.DataFrame):
         detector = detector_data.iloc[i]
         name = detector["Detector"]
         classifier = DummyClassifier()
+        routing_latency = detector.get("Routing Latency", 900e-9) #default of 900 ns
         
         node_properties = {
                       "sample data": detector["Data (bytes)"],
                       "sample rate": detector["Sample Rate"],
                       "type": "detector",
                       "op efficiency": detector["Op Efficiency (J/op)"],
+                      "op latency": 1.0e-9,
                       "classifier": classifier,
                       "error matrix": classifier.error_matrix,
+                      "routing latency": routing_latency,
                       "reduction ratio": 1.0,
                       "reduction": 0.0, #by definition, a detector produces data and does not reject any
                       "data reduction": 1.0 - detector["Compression"], #it can compress it, though
                       "complexity": lambda x: x,
+                      "parallelism": lambda x: 1,
                       }
         nodes.append((name, node_properties))
 
@@ -135,6 +167,7 @@ def processors(processor_data: pd.DataFrame):
         name = processor["Name"]
         rr = processor["Reduction Ratio"]
         classifier_type = processor["Classifier"]
+        routing_latency = processor.get("Routing Latency", 900e-9) #default of 900 ns
 
         if classifier_type == "Gaussian":
             classifier = GaussianClassifier(processor["Skill mean"], processor["Skill variance"])
@@ -151,8 +184,11 @@ def processors(processor_data: pd.DataFrame):
             "classifier": classifier,
             "data reduction": 1.0 - processor["Compression"],
             "op efficiency": processor["Op Efficiency (J/op)"],
+            "op latency": 1.0e-9,
+            "routing latency": routing_latency,
             "sample data": processor["Data (bytes)"],
             "complexity": lambda x: x,
+            "parallelism": lambda x: 1,
         }
         
         
@@ -376,9 +412,9 @@ def update_throughput(graph: nx.classes.digraph):
     propagate_statistics(graph, root)
     #update graph statistics (postprocess)
     link_throughput(graph)
+    propagate_latency(graph, root)
     
     #calculate overall classifier performance
-    #propagate_statistics
 
     #calculate power resources & metrics
     graph.graph["link power"] = link_power(graph)
