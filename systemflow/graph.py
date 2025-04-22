@@ -125,19 +125,19 @@ def detectors(detector_data: pd.DataFrame):
 """
 Return nodes and edges from a dataframe representing the system's data processing nodes (triggers)
 """
-def triggers(trigger_data: pd.DataFrame):
-    n = len(trigger_data)
+def processors(processor_data: pd.DataFrame):
+    n = len(processor_data)
     edges = []
-    triggers = []
+    processors = []
 
     for i in range(n):
-        trigger = trigger_data.iloc[i]
-        name = trigger["Name"]
-        rr = trigger["Reduction Ratio"]
-        classifier_type = trigger["Classifier"]
+        processor = processor_data.iloc[i]
+        name = processor["Name"]
+        rr = processor["Reduction Ratio"]
+        classifier_type = processor["Classifier"]
 
         if classifier_type == "Gaussian":
-            classifier = GaussianClassifier(trigger["Skill mean"], trigger["Skill variance"])
+            classifier = GaussianClassifier(processor["Skill mean"], processor["Skill variance"])
         elif classifier_type == "L1T":
             classifier = L1TClassifier()
         elif classifier_type == "HLT":
@@ -149,22 +149,22 @@ def triggers(trigger_data: pd.DataFrame):
             "type": "processor",
             "reduction ratio": rr,
             "classifier": classifier,
-            "data reduction": 1.0 - trigger["Compression"],
-            "op efficiency": trigger["Op Efficiency (J/op)"],
-            "sample data": trigger["Data (bytes)"],
+            "data reduction": 1.0 - processor["Compression"],
+            "op efficiency": processor["Op Efficiency (J/op)"],
+            "sample data": processor["Data (bytes)"],
             "complexity": lambda x: x,
         }
         
         
-        triggers.append((name, node_properties))
+        processors.append((name, node_properties))
 
-        output = trigger["Output"]
+        output = processor["Output"]
         if not pd.isna(output):
-            edge_properties = {"link efficiency": trigger["Link Efficiency (J/bit)"],}
-            edge = (trigger["Name"], trigger["Output"], edge_properties)
+            edge_properties = {"link efficiency": processor["Link Efficiency (J/bit)"],}
+            edge = (processor["Name"], processor["Output"], edge_properties)
             edges.append(edge)
 
-    return triggers, edges
+    return processors, edges
 
 """
 From a graph, identify the root of the tree (final processing node / storage)
@@ -182,17 +182,17 @@ def identify_root(graph: nx.classes.digraph):
 Given dataframes representing the system's detectors, processing nodes, and processor scaling estimates,
 construct the graph representing it
 """
-def construct_graph(detector_data: pd.DataFrame, trigger_data: pd.DataFrame, globals: pd.DataFrame, functions: dict):
+def construct_graph(detector_data: pd.DataFrame, processor_data: pd.DataFrame, globals: pd.DataFrame, functions: dict):
     g = nx.DiGraph()
     #add the nodes for detectors
     detector_nodes, detector_edges = detectors(detector_data)
     g.add_nodes_from(detector_nodes)
-    #add the nodes for trigger systems
-    trigger_nodes, trigger_edges = triggers(trigger_data)
-    g.add_nodes_from(trigger_nodes)
+    #add the nodes for processor systems
+    processor_nodes, processor_edges = processors(processor_data)
+    g.add_nodes_from(processor_nodes)
     #connect the systems
     g.add_edges_from(detector_edges)
-    g.add_edges_from(trigger_edges)
+    g.add_edges_from(processor_edges)
     #add other information
     g.graph["globals"] = globals
 
@@ -387,18 +387,18 @@ def update_throughput(graph: nx.classes.digraph):
     
     return graph
     
-System = namedtuple("System", ["detectors", "triggers", "globals"]) 
+System = namedtuple("System", ["detectors", "processors", "globals"]) 
 
 def dataframes_from_spreadsheet(filename: str):
     detectors = pd.read_excel(filename, sheet_name="Detectors")
-    triggers = pd.read_excel(filename, sheet_name="Triggers")
+    processors = pd.read_excel(filename, sheet_name="Processors")
     globals = pd.read_excel(filename, sheet_name="Global")
 
-    sys = System(detectors, triggers, globals)
+    sys = System(detectors, processors, globals)
     return sys
 
 def graph_from_spreadsheet(filename: str, functions: dict):
-    detectors, triggers, globals = dataframes_from_spreadsheet(filename)
-    graph = construct_graph(detectors, triggers, globals, functions)
+    detectors, processors, globals = dataframes_from_spreadsheet(filename)
+    graph = construct_graph(detectors, processors, globals, functions)
 
     return graph
