@@ -169,44 +169,62 @@ class Component(ABC):
             #otherwise, create a blank message
             input_msg = self.blank_message()
         
-        #go through the mutations on this component
-        mutations = list(accumulate(self.mutations, lambda x, f: f(x[0]), initial=input_msg))
-        #separate the message and property outputs
-        properties = [output[1] for output in mutations]
-        merged_properties = reduce(lambda x, y: x | y, properties) | self.properties
+        if len(self.mutations) > 0:
+            #go through the mutations on this component
+            mutations = list(accumulate(self.mutations, lambda x, f: f(x[0], x[1]), initial=(self, input_msg)))
+            #separate the message and property outputs
+            properties = [output[1] for output in mutations[1:]]
+            merged_properties = reduce(lambda x, y: x | y, properties) | self.properties
+            output_msg = mutations[-1][0]
+        else:
+            #pass through the existing properties & merged message if no mutations present
+            merged_properties = self.properties
+            output_msg = input_msg
 
         #store the new output message in the new component
         new_component = Component(self.name, self.mutations, self.parameters, merged_properties)
-        new_component.output_msg = mutations[-1][0]
+        new_component.output_msg = output_msg
         
         return new_component
     
-# Transport Nodes
+# Transport Processes
 
 class Transport(ABC):
-    def __init__(self, msg_fields: dict, msg_properties: dict, parameters: dict) -> None:
+    def __init__(self, msg_fields: list[str], msg_properties: list[str], parameters: list[str]) -> None:
         self.msg_fields = msg_fields
         self.msg_properties = msg_properties
         self.parameters = parameters
         self.properties = {}
 
+    def _missing_keys(self, matches: list, values: list) -> str:
+        missing = []
+        for (i,m) in enumerate(matches):
+            if not m:
+                missing.append(values[i])
+
+        missing_fields = reduce(lambda x, y: x + ", " + y, missing)
+        return missing_fields
+
     def _field_check(self, message: Message) -> None:
-        field_present = [f in message.fields.keys() for f in self.msg_fields]
-        assert np.all(field_present), "Input field for transform not found in incoming message"
+        matches = [f in message.fields.keys() for f in self.msg_fields]
+        field_chk = np.all(matches)
+        if not field_chk:
+            missing = self._missing_keys(matches, self.msg_fields)
+            assert field_chk, "Input field for transform not found in transmitted message: " + missing
 
     def _property_check(self, message: Message) -> None:
         matches = [f in message.properties.keys() for f in self.msg_properties]
         props_chk = np.all(matches)
         if not props_chk:
-            missing = str(self.properties.keys()[~matches]) 
-            assert props_chk, str("Transform's properties not found in incoming message:", missing)
+            missing = self._missing_keys(matches, self.msg_properties)
+            assert props_chk, "Transform's properties not found in transmitted message: " + missing
     
     def _param_check(self, link: 'Link') -> None:
-        matches = [f in link.parameters.keys() for f in self.parameters]
+        matches = [f in link.parameters.keys() for f in self.host_parameters]
         params_chk = np.all(matches)
         if not params_chk:
-            missing = str(self.parameters.keys()[~matches]) 
-            assert params_chk, str("Transform's control parameters not found in host component:", missing)
+            missing = self._missing_keys(matches, self.host_parameters)
+            assert params_chk, "Transform's control parameters not found in host link: " + missing
 
     def transport(self, link: 'Link', message: Message) -> dict:
         parameters = link.parameters
@@ -225,6 +243,10 @@ class Transport(ABC):
         
         new_properties = self.transport(link, tx_message)
         return new_properties
+    
+class DummyTransport(Transport):
+    def __init__(self):
+        super().__init__([], [], [])
 
 #Links
 
@@ -242,6 +264,9 @@ class Link(ABC):
         new_link = Link(self.name, self.tx, self.rx, self.transport, self.properties | new_properties)
         return new_link
 
+class DefaultLink(Link):
+    def __init__(self, name, tx, rx):
+        super().__init__(name, tx, rx, [], {})
 
 # Execution graphs
 def flatten_tuple(t):
@@ -266,7 +291,7 @@ class ExecutionGraph(ABC):
 
         nodes = [(n.name, {"ref": n,}) for n in nodes]
         edges = [(l.tx, l.rx, {"ref": l}) for l in links]
-        self.graph = self.construct_graph(nodes, edges, 0)
+        self.graph = self.construct_graph(nodes, edges)
         self.root = self.identify_root()
 
     def construct_graph(self, nodes: list[Component], edges: list[Link]) -> nx.classes.digraph:
@@ -278,6 +303,16 @@ class ExecutionGraph(ABC):
         assert nx.is_directed_acyclic_graph(g), "Graph must be a tree (acyclic), check definition"
 
         return g
+    
+    def get_node(self, name: str) -> Component:
+        g = self.graph
+        component = g.nodes[name]["ref"]
+        return component
+    
+    def get_edge(self, tx: str, rx: str) -> Link:
+        g = self.graph
+        link = g.edges[(tx, rx)]["ref"]
+        return link
 
     """
     Identify and return the root node of the execution graph
@@ -294,7 +329,7 @@ class ExecutionGraph(ABC):
     """
     def get_predecessors(self, node: Component) -> list[Component]:
         up = list(self.graph.predecessors(node.name))
-        components = [u["ref"] for u in up]
+        components = [self.get_node(name) for name in up]
         return components
     
     """
@@ -313,7 +348,8 @@ class ExecutionGraph(ABC):
     
     def __call__(self) -> 'ExecutionGraph':
         #Get the root processing node and propagate calls recursively up from it
-        new_nodes = flatten_tuple(self.root(self))
+        root_node = self.get_node(self.root)
+        new_nodes = flatten_tuple(root_node(self))
         #update the link information given the new nodes
         new_links = [link(new_nodes) for link in self.links]
         #create the new execution graph
