@@ -8,7 +8,7 @@ from copy import deepcopy
 from functools import reduce
 from typing import Callable, Any
 from itertools import accumulate
-
+from collections.abc import Iterable
 
 
 # Message handling
@@ -156,17 +156,18 @@ class Component(ABC):
         message = Message({}, {})
         return message
 
-    def __call__(self, exg: 'ExecutionGraph') -> 'Component':
+    def __call__(self, exg: 'ExecutionGraph') -> list['Component', 'Component']:
         #find which components send messages here
         predecessors = exg.get_predecessors(self)
         if len(predecessors) > 0:
             #gather their input messages
             input_components = [node(exg) for node in predecessors]
-            input_messages = [component.output_msg for component in input_components]
+            input_messages = [component[0].output_msg for component in input_components]
             #merge them
             input_msg = self.merge(input_messages)
         else:
             #otherwise, create a blank message
+            input_components = []
             input_msg = self.blank_message()
         
         if len(self.mutations) > 0:
@@ -185,7 +186,7 @@ class Component(ABC):
         new_component = Component(self.name, self.mutations, self.parameters, merged_properties)
         new_component.output_msg = output_msg
         
-        return new_component
+        return new_component, input_components
     
 # Transport Processes
 
@@ -220,10 +221,10 @@ class Transport(ABC):
             assert props_chk, "Transform's properties not found in transmitted message: " + missing
     
     def _param_check(self, link: 'Link') -> None:
-        matches = [f in link.parameters.keys() for f in self.host_parameters]
+        matches = [f in link.parameters.keys() for f in self.parameters]
         params_chk = np.all(matches)
         if not params_chk:
-            missing = self._missing_keys(matches, self.host_parameters)
+            missing = self._missing_keys(matches, self.parameters)
             assert params_chk, "Transform's control parameters not found in host link: " + missing
 
     def transport(self, link: 'Link', message: Message) -> dict:
@@ -232,8 +233,8 @@ class Transport(ABC):
         # USER - calculate new properties for the link here
         return new_properties
 
-    def __call__(self, link: 'Link') -> dict:
-        tx_message = link.tx.output_msg
+    def __call__(self, link: 'Link', tx_node: Component) -> dict:
+        tx_message = tx_node.output_msg
         #check that all incoming messages have the field(s)/parameters necessary for the transform
         self._field_check(tx_message)
         #check that the incoming message has the parameters necessary for the transform
@@ -251,30 +252,40 @@ class DummyTransport(Transport):
 #Links
 
 class Link(ABC):
-    def __init__(self, name: str, tx: Component, rx: Component, transport: Transport, parameters: dict):
+    def __init__(self, name: str, tx: Component, rx: Component, transport_op: Transport, parameters: dict):
         self.name = name
         self.tx = tx
         self.rx = rx
-        self.transport = transport
+        self.transport_op = transport_op
         self.parameters = parameters
         self.properties = {}
 
-    def __call__(self) -> 'Link':
-        new_properties = self.transport(self)
-        new_link = Link(self.name, self.tx, self.rx, self.transport, self.properties | new_properties)
+    def get_node_from_list(self, name: str, nodes: list[Component]) -> Component:
+        names = [node.name for node in nodes]
+        assert name in names, "Node not found in list"
+        for node in nodes:
+            if name == node.name:
+                return node
+
+    def __call__(self, nodes: list['Component']) -> 'Link':
+        tx_node = self.get_node_from_list(self.tx, nodes)
+        new_properties = self.transport_op(self, tx_node)
+        new_link = Link(self.name, self.tx, self.rx, self.transport_op, self.properties | new_properties)
         return new_link
 
 class DefaultLink(Link):
     def __init__(self, name, tx, rx):
-        super().__init__(name, tx, rx, [], {})
+        super().__init__(name, tx, rx, DummyTransport(), {})
 
 # Execution graphs
-def flatten_tuple(t):
-    for item in t:
-        if isinstance(item, tuple):
-            yield from flatten_tuple(item)
+def flatten(lst):
+    """Flattens a list of arbitrary depth."""
+    for item in lst:
+        if isinstance(item, Iterable) and not isinstance(item, (str, bytes)):
+            yield from flatten(item)
         else:
             yield item
+    
 """
 Contains the graph of execution flow for a task
 """    
@@ -349,7 +360,7 @@ class ExecutionGraph(ABC):
     def __call__(self) -> 'ExecutionGraph':
         #Get the root processing node and propagate calls recursively up from it
         root_node = self.get_node(self.root)
-        new_nodes = flatten_tuple(root_node(self))
+        new_nodes = list(flatten(root_node(self)))
         #update the link information given the new nodes
         new_links = [link(new_nodes) for link in self.links]
         #create the new execution graph
