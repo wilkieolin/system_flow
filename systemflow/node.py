@@ -114,7 +114,7 @@ class Mutate(ABC):
             missing = self._missing_keys(matches, self.host_parameters)
             assert params_chk, "Transform's control parameters not found in host component: " + missing
 
-    def transform(self, component: 'Component', message: Message) -> tuple[dict, dict, dict]:
+    def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
         new_msg_fields = {}
         new_msg_properties = {}
         new_host_properties = {}
@@ -122,7 +122,7 @@ class Mutate(ABC):
         # USER - calculate new fields/properties for message/component here
         return new_msg_fields, new_msg_properties, new_host_properties
     
-    def __call__(self, component: 'Component', message: Message) -> tuple[Message, dict]:
+    def __call__(self, message: Message, component: 'Component') -> tuple[Message, dict]:
         #check that all incoming messages have the field(s)/parameters necessary for the transform
         self._field_check(message)
         #check that the incoming message has the parameters necessary for the transform
@@ -134,7 +134,7 @@ class Mutate(ABC):
         component = deepcopy(component)
         message = deepcopy(message)
         #determine the new fields for the message and properties for message and host
-        new_msg_fields, new_msg_props, new_host_props = self.transform(component, message)
+        new_msg_fields, new_msg_props, new_host_props = self.transform(message, component)
         #merge information into a new outgoing message
         new_message = Message(message.fields | new_msg_fields, message.properties | new_msg_props)
 
@@ -171,9 +171,9 @@ class Component(ABC):
         
         if len(self.mutations) > 0:
             #go through the mutations on this component
-            mutations = list(accumulate(self.mutations, lambda x, f: f(x[0], x[1]), initial=(self, input_msg)))
+            mutations = list(accumulate(self.mutations, lambda x, f: f(x[0], self), initial=(input_msg, {})))
             #separate the message and property outputs
-            properties = [output[1] for output in mutations[1:]]
+            properties = [output[1] for output in mutations]
             merged_properties = reduce(lambda x, y: x | y, properties) | self.properties
             output_msg = mutations[-1][0]
         else:
