@@ -783,6 +783,7 @@ class ExecutionGraph(ABC):
             name=self.name,
             nodes=updated_components,
             links=self.links,
+            metrics=self.metrics,
             iteration=self.iteration
         )
     
@@ -804,10 +805,10 @@ class ExecutionGraph(ABC):
         new_nodes = list(flatten(self.root_node(self, verbose)))
         #update the link information given the new nodes
         new_links = [link(new_nodes) for link in self.links]
-        #calculate metrics
-        metrics = [metric(self) for metric in self.metrics]
         #create the new execution graph
         exg = ExecutionGraph(self.name, new_nodes, new_links, self.metrics, self.iteration + 1)
+        #calculate metrics
+        metrics = [metric(exg) for metric in self.metrics]
         #store the metrics
         exg.metric_values = metrics
         return exg
