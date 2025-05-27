@@ -591,10 +591,11 @@ class ExecutionGraph(ABC):
         root (str): The name of the root (terminal) node of the graph.
         root_node (Component): The Component instance corresponding to the root node.
     """
-    def __init__(self, name: str, nodes: list[Component], links: list[Link], iteration: int = 0):
+    def __init__(self, name: str, nodes: list[Component], links: list[Link], metrics: list['Metric'] = [], iteration: int = 0):
         self.name = name
         self.nodes = nodes
         self.links = links
+        self.metrics = metrics
         self.iteration = iteration
 
         nodes = [(n.name, {"ref": n,}) for n in nodes]
@@ -732,6 +733,59 @@ class ExecutionGraph(ABC):
                 all_parameters[component.name] = component.parameters
         return all_parameters
     
+    def with_updated_parameters(self, new_parameters_map: dict[str, dict]) -> 'ExecutionGraph':
+        """
+        Creates a new ExecutionGraph with updated parameters for its components.
+
+        The original ExecutionGraph instance remains unchanged. This method is useful
+        for creating variations of a graph with different parameter configurations
+        without modifying the original.
+
+        Args:
+            new_parameters_map: A dictionary where keys are component names (str)
+                                and values are dictionaries of parameters (dict)
+                                to update for that specific component.
+                                For each component name found in this map:
+                                 - Its existing parameters are taken as a base.
+                                 - The parameters from new_parameters_map[component_name]
+                                   are then merged in, overriding any existing parameters
+                                   with the same key and adding new ones.
+                                Components not listed in new_parameters_map retain their
+                                original parameters.
+
+        Returns:
+            A new ExecutionGraph instance with the specified parameter updates.
+            The iteration count of the new graph will be the same as the original
+            graph from which it was derived, as this is a configuration change,
+            not an execution step.
+        """
+        updated_components = []
+        # self.nodes stores the original list of Component instances
+        for original_component in self.nodes:
+            component_name = original_component.name
+            # Start with a copy of the component's current parameters
+            updated_params = original_component.parameters.copy()
+
+            if component_name in new_parameters_map:
+                # Merge/update with the new parameters provided for this component
+                updated_params.update(new_parameters_map[component_name])
+
+            new_comp = Component(
+                name=original_component.name,
+                mutations=original_component.mutations,
+                parameters=updated_params,
+                properties=original_component.properties,  # Use initial properties
+                merge=original_component.merge
+            )
+            updated_components.append(new_comp)
+
+        return ExecutionGraph(
+            name=self.name,
+            nodes=updated_components,
+            links=self.links,
+            iteration=self.iteration
+        )
+    
     def __call__(self, verbose: bool = False) -> 'ExecutionGraph':
         """
         Executes the entire graph.
@@ -750,9 +804,132 @@ class ExecutionGraph(ABC):
         new_nodes = list(flatten(self.root_node(self, verbose)))
         #update the link information given the new nodes
         new_links = [link(new_nodes) for link in self.links]
+        #calculate metrics
+        metrics = [metric(self) for metric in self.metrics]
         #create the new execution graph
-        exg = ExecutionGraph(self.name, new_nodes, new_links, self.iteration + 1)
+        exg = ExecutionGraph(self.name, new_nodes, new_links, self.metrics, self.iteration + 1)
+        #store the metrics
+        exg.metric_values = metrics
         return exg
+    
+
+class Metric(ABC):
+    def __init__(self, name: str, msg_fields: list[str], msg_properties: list[str], host_properties: dict[str]):
+        self.name = name
+        self.msg_fields = msg_fields
+        self.msg_properties = msg_properties
+        self.host_properties = host_properties
+
+    def _missing_keys(self, matches: list, values: list) -> str:
+        """
+        Helper function to generate a comma-separated string of missing items.
+
+        Args:
+            matches: A list of booleans indicating presence (True) or absence (False).
+            values: A list of corresponding item names.
+
+        Returns:
+            A string listing the names of items where `matches` was False.
+        """
+        missing = []
+        for (i,m) in enumerate(matches):
+            if not m:
+                missing.append(values[i])
+
+        missing_fields = reduce(lambda x, y: x + ", " + y, missing)
+        return missing_fields
+    
+    def _field_check(self, message: Message) -> None:
+        """
+        Checks if all required message fields are present in the incoming message.
+
+        Args:
+            message: The input Message object.
+
+        Raises:
+            AssertionError: If any of the fields specified in `self.msg_fields` are missing.
+        """
+        matches = [f in message.fields.keys() for f in self.msg_fields]
+        field_chk = np.all(matches)
+        if not field_chk:
+            missing = self._missing_keys(matches, self.msg_fields)
+            assert field_chk, "Input field for metric " + self.name + " not found in incoming message: " + missing
+
+    def _msg_property_check(self, message: Message) -> None:
+        """
+        Checks if all required message properties are present in the incoming message.
+
+        Args:
+            message: The input Message object.
+
+        Raises:
+            AssertionError: If any of the properties specified in `self.msg_properties` are missing.
+        """
+        matches = [f in message.properties.keys() for f in self.msg_properties]
+        props_chk = np.all(matches)
+        if not props_chk:
+            missing = self._missing_keys(matches, self.msg_properties)
+            assert props_chk, self.name + " metric's properties not found in incoming message: " + missing
+    
+    def _host_property_check(self, all_properties: dict[str]) -> None:
+        """
+        Checks if all required host properties are present in the host ExecutionGraph.
+
+        Args:
+            component: The host Component object.
+
+        Raises:
+            AssertionError: If any of the properties specified in `self.host_properties` are missing.
+        """
+        for (k,v) in self.host_properties.items():
+            assert k in all_properties.keys(), "Missing component" + str(k) + " from properties"
+            props = all_properties[k]
+            assert v in props.keys(), "Missing property " + str(v) + " from component " + str(k)
+        
+
+    def metric(self, graph: ExecutionGraph) -> dict[str]:
+        """
+        The core metric logic to be implemented by subclasses.
+
+        This method should access data from the ExecutionGraph 'graph',
+        utilizing the fields and properties in its root output message
+        and all component parameters to produce one or more desired metrics
+        to be stored in the ExecutionGraph.
+
+        Args:
+            graph: The host ExecutionGraph
+
+        Returns:
+            metrics: A dictionary of metrics to be stored in the host graph
+        """
+        metrics = {}
+        return metrics
+
+    def __call__(self, graph: ExecutionGraph):
+        """
+        Produces a metric from an ExecutionGraph.
+
+        This method first performs checks for required fields, properties, and parameters.
+        Then, it calls the `metric` method to get the new data and returns this data
+        to be merged into its host ExecutionGraph.
+
+        Args:
+            component: The host ExecutionGraph that this metric is part of.
+
+        Returns:
+            metrics: A dictionary of metrics to be stored in the host graph
+        """
+        message = graph.root_node.output_msg
+        #check that the graph output message has the field(s)/parameters necessary for the transform
+        self._field_check(message)
+        #check that the graph output message has the parameters necessary for the transform
+        self._msg_property_check(message)
+        #check that the host component has the parameters necessary for the transform
+        self._host_property_check(graph.get_all_node_properties())
+
+        metrics = self.metric(graph)
+        return metrics
+
 
 """
 Orchestrates a collection of ExecutionGraph instances.
