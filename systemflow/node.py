@@ -15,8 +15,8 @@ from collections.abc import Iterable
 #: A named tuple representing a message passed between components.
 #:
 #: Attributes:
-#:  fields (dict): A dictionary containing the primary data of the message.
-#:  properties (dict): A dictionary containing metadata or secondary attributes of the message.
+#:  fields (dict): A dictionary containing the data which varies by sample (e.g. fluence, temperature)
+#:  properties (dict): A dictionary containing sample-independent data (e.g. resolution, sample rate)
 Message = namedtuple("Message", ["fields", "properties"])
 
 class Merge(ABC):
