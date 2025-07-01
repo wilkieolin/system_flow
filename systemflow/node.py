@@ -1,6 +1,5 @@
 import networkx as nx
 import sys
-from ruamel.yaml import YAML
 import numpy as np
 from abc import ABC, abstractmethod
 from collections import namedtuple
@@ -10,261 +9,11 @@ from typing import Callable, Any
 from itertools import accumulate
 from collections.abc import Iterable
 
-
-# Message handling
-#: A named tuple representing a message passed between components.
-#:
-#: Attributes:
-#:  fields (dict): A dictionary containing the data which varies by sample (e.g. fluence, temperature)
-#:  properties (dict): A dictionary containing sample-independent data (e.g. resolution, sample rate)
-Message = namedtuple("Message", ["fields", "properties"])
-
-class Merge(ABC):
-    """
-    Abstract Base Class for defining strategies to merge multiple Message objects.
-
-    When multiple messages are input to a Component, a Merge strategy dictates
-    how their fields and properties are combined into a single message.
-    """
-    def __init__(self, field_merges: dict[str, Callable], property_merges: dict[str, Callable]):
-        super().__init__()
-        self.field_merges = field_merges
-        self.property_merges = property_merges
-
-    """
-    If only one dictionary has a value defined, take that value. If there are more,
-    reduce by the function in "merges" if it exists, otherwise take the first value.
-    """
-    def merge_dictionaries(self, dicts: list[dict], merges: dict[str, Callable]) -> dict:
-        """
-        Merges a list of dictionaries into a single dictionary.
-
-        For each key present across the input dictionaries:
-        - If the key exists in only one dictionary, its value is taken.
-        - If the key exists in multiple dictionaries:
-            - If a specific merge function is provided for that key in `merges`,
-              it's used to combine the values.
-            - Otherwise, a warning is printed, and the value from the first
-              dictionary (in the order they appear in `values`) is taken.
-
-        Args:
-            dicts: A list of dictionaries to merge.
-            merges: A dictionary mapping keys to callable functions. Each function
-                    should accept a list of values and return a single merged value.
-
-        Returns:
-            A new dictionary containing the merged key-value pairs.
-        """
-        # Get all unique keys across dictionaries
-        all_keys = reduce(lambda x, y: x.union(y), (set(d.keys()) for d in dicts))
-        keys_list = list(all_keys)
-        if len(keys_list) == 0:
-            return {}
-        
-        # Create boolean matrix showing key presence in each dictionary
-        matches = np.array([[k in d for d in dicts] for k in keys_list])
-        key_counts = np.sum(matches, axis=1)  # Count per key
-        
-        merged_dict = {}
-        for idx, count in enumerate(key_counts):
-            current_key = keys_list[idx]
-            
-            if count == 1:  # Single dictionary has the key
-                dict_idx = np.where(matches[idx])[0][0]
-                merged_dict[current_key] = dicts[dict_idx][current_key]
-            else:  # Multiple dictionaries have the key
-                # Get values from all dictionaries containing the key
-                values = [d[current_key] for d in dicts if current_key in d]
-                
-                if current_key in merges:  # Use custom merge function
-                    merged_dict[current_key] = merges[current_key](values)
-                else:  # Take first occurrence
-                    print("No merge provided for " + current_key + ", taking first value")
-                    merged_dict[current_key] = values[0]
-                    
-        return merged_dict
+from systemflow.auxtypes import *
+from systemflow.merges import *
+from systemflow.mutations import *
 
 
-    def __call__(self, messages: list[Message]) -> Message:
-        """
-        Merges a list of Message objects into a single Message.
-
-        Args:
-            messages: A list of Message objects to be merged.
-
-        Returns:
-            A new Message object containing the merged fields and properties.
-        """
-        fields = [message.fields for message in messages]
-        properties = [message.properties for message in messages]
-
-        fields = self.merge_dictionaries(fields, self.field_merges)
-        properties = self.merge_dictionaries(properties, self.property_merges)
-
-        merged_message = Message(fields, properties)
-        return merged_message
-
-class OverwriteMerge(Merge):
-    """
-    A simple Merge strategy where conflicting keys are resolved by taking the
-    value from the first message encountered. No specific merge functions are defined,
-    so it relies on the default behavior of `Merge.merge_dictionaries`.
-    """
-    def __init__(self):
-        super().__init__({}, {})
-    
-# Mutations
-
-"""
-Abstract class which defines the template for component augmentation operatiuons.
-Mutate transforms take a set of input fields/properties from an incoming message
-and/or parameters from its host component to create or change fields in the message
-and properties in the host component.
-These transforms can impart a set of properties (power consumption, etc) on the host component.
-"""
-class Mutate(ABC):
-    """
-    Abstract Base Class for operations that transform a Message and/or its host Component.
-
-    A Mutate object defines a specific transformation, specifying the required
-    input message fields, message properties, and host component parameters.
-    When called, it applies this transformation and can update the message
-    and/or add new properties to the host component.
-    """
-    def __init__(self, name: str, msg_fields: list[str], msg_properties: list[str], host_parameters: list[str]):
-        self.name = name
-        #fields contain the data necessary for the transform
-        self.msg_fields = msg_fields 
-        #parameters control the behavior of the transform
-        self.msg_properties = msg_properties 
-        self.host_parameters = host_parameters
-
-    def _missing_keys(self, matches: list, values: list) -> str:
-        """
-        Helper function to generate a comma-separated string of missing items.
-
-        Args:
-            matches: A list of booleans indicating presence (True) or absence (False).
-            values: A list of corresponding item names.
-
-        Returns:
-            A string listing the names of items where `matches` was False.
-        """
-        missing = []
-        for (i,m) in enumerate(matches):
-            if not m:
-                missing.append(values[i])
-
-        missing_fields = reduce(lambda x, y: x + ", " + y, missing)
-        return missing_fields
-
-    def _field_check(self, message: Message) -> None:
-        """
-        Checks if all required message fields are present in the incoming message.
-
-        Args:
-            message: The input Message object.
-
-        Raises:
-            AssertionError: If any of the fields specified in `self.msg_fields` are missing.
-        """
-        matches = [f in message.fields.keys() for f in self.msg_fields]
-        field_chk = np.all(matches)
-        if not field_chk:
-            missing = self._missing_keys(matches, self.msg_fields)
-            assert field_chk, "Input field for transform " + self.name + " not found in incoming message: " + missing
-
-    def _property_check(self, message: Message) -> None:
-        """
-        Checks if all required message properties are present in the incoming message.
-
-        Args:
-            message: The input Message object.
-
-        Raises:
-            AssertionError: If any of the properties specified in `self.msg_properties` are missing.
-        """
-        matches = [f in message.properties.keys() for f in self.msg_properties]
-        props_chk = np.all(matches)
-        if not props_chk:
-            missing = self._missing_keys(matches, self.msg_properties)
-            assert props_chk, self.name + " transform's properties not found in incoming message: " + missing
-    
-    def _param_check(self, component: 'Component') -> None:
-        """
-        Checks if all required host parameters are present in the host Component.
-
-        Args:
-            component: The host Component object.
-
-        Raises:
-            AssertionError: If any of the parameters specified in `self.host_parameters` are missing.
-        """
-        matches = [f in component.parameters.keys() for f in self.host_parameters]
-        params_chk = np.all(matches)
-        if not params_chk:
-            missing = self._missing_keys(matches, self.host_parameters)
-            assert params_chk, self.name + " transform's control parameters not found in host component: " + missing
-
-    def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
-        """
-        The core transformation logic to be implemented by subclasses.
-
-        This method should access data from the `message` (fields and properties)
-        and `component` (parameters), perform calculations, and return new
-        data to be incorporated into the output message and host component.
-
-        Args:
-            message: The input Message object (a deep copy).
-            component: The host Component object (a deep copy).
-
-        Returns:
-            A tuple containing three dictionaries:
-            - new_msg_fields: New fields to be added to or overwrite in the message.
-            - new_msg_properties: New properties to be added to or overwrite in the message.
-            - new_host_properties: New properties to be added to or overwrite in the host component.
-        """
-        new_msg_fields = {}
-        new_msg_properties = {}
-        new_host_properties = {}
-        
-        # USER - calculate new fields/properties for message/component here
-        return new_msg_fields, new_msg_properties, new_host_properties
-    
-    def __call__(self, message: Message, component: 'Component') -> tuple[Message, dict]:
-        """
-        Applies the mutation to a message and its host component.
-
-        This method first performs checks for required fields, properties, and parameters.
-        Then, it calls the `transform` method to get the new data and merges this
-        data into a new Message object and updates the host component's properties.
-
-        Args:
-            message: The input Message object.
-            component: The host Component that this mutation is part of.
-
-        Returns:
-            A tuple containing:
-            - new_message: The transformed Message object.
-            - new_host_props: A dictionary of new properties for the host component.
-        """
-        #check that all incoming messages have the field(s)/parameters necessary for the transform
-        self._field_check(message)
-        #check that the incoming message has the parameters necessary for the transform
-        self._property_check(message)
-        #check that the host component has the parameters necessary for the transform
-        self._param_check(component)
-
-        #create independent copies of the message and component
-        component = deepcopy(component)
-        message = deepcopy(message)
-        #determine the new fields for the message and properties for message and host
-        new_msg_fields, new_msg_props, new_host_props = self.transform(message, component)
-        #merge information into a new outgoing message
-        new_message = Message(message.fields | new_msg_fields, message.properties | new_msg_props)
-
-        return new_message, new_host_props
-    
 # Transformation nodes
 
 class Component(ABC):
@@ -283,7 +32,7 @@ class Component(ABC):
         properties (dict): State properties of this component, potentially modified by mutations.
         merge (Merge): A Merge strategy object for combining multiple input messages.
     """
-    def __init__(self, name: str, mutations: list[Mutate], parameters: dict, properties: dict, merge: Merge = OverwriteMerge()) -> None:
+    def __init__(self, name: str, mutations: list[Mutate], parameters: dict = {}, properties: dict = {}, merge: Merge = OverwriteMerge()) -> None:
         super().__init__()
         self.name = name
         self.merge = merge
@@ -291,6 +40,10 @@ class Component(ABC):
         self.mutations = mutations
         self.parameters = parameters
         self.properties = properties
+
+        req_parameters = collect_parameters(mutations, to_dict=True)
+        for p in req_parameters.values():
+            assert p in parameters.keys(), "Missing parameter " + p
 
     def blank_message(self) -> Message:
         """
