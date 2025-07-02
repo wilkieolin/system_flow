@@ -62,6 +62,8 @@ class Mutate(ABC):
         # #Output host properties
         # host_properties = VarCollection()
         # outputs = MutationOutputs(msg_fields, msg_properties, host_properties)
+
+        # super().__init__(name, inputs, outputs)
         
         self.name = name
         self.inputs = inputs
