@@ -717,54 +717,5 @@ class System(ABC):
         new_system = System(self.name, new_graphs, getattr(self, 'iter', 0) + 1)
         return new_system
     
-# Basic & example implementations
 
-class Convolve(Mutate):
-    """
-    An example Mutate operation that simulates a convolution process on image data.
-    This version is specific to the node.py file and might differ from notebook examples.
-    """
-    def __init__(self,):
-        fields = ["image data"]
-        properties = ["sensor"]
-        parameters = ["kernel x", "kernel y", "filters"]
-        super().__init__(fields, properties, parameters)
-
-    def transform(self, component: Component, message: Message):
-        """
-        Performs a mock convolution operation.
-
-        It calculates the number of operations based on sensor resolution and kernel parameters,
-        and adds "features" to the message fields and "transform operations" to component properties.
-
-        Args:
-            component: The host Component (provides kernel parameters).
-            message: The input Message (provides sensor resolution from its properties).
-
-        Returns:
-            A tuple (updated_message, new_component_properties).
-        """
-        #access the required fields/properties/parameters
-        res = message.properties["sensor"]
-        kernel_x = component.parameters["kernel x"]
-        kernel_y = component.parameters["kernel y"]
-        filters = component.parameters["filters"]
-
-        #calculate the number of ops required for the kernel
-        kernel_ops = kernel_x * kernel_y * filters
-        steps_x = (res[0] - kernel_x) // kernel_x
-        steps_y = (res[1] - kernel_y) // kernel_y
-        kernel_repeats = steps_x * steps_y
-
-        #calculate the number of ops required for the kernel
-        transform_operations = kernel_ops * kernel_repeats
-
-        properties = {}
-        properties["transform operations"] = transform_operations
-        # Assuming ureg.byte was from a units library, which is not imported here.
-        # For this standalone file, we'll store it as a raw number.
-        message.fields["features"] = np.prod((steps_x, steps_y, filters))
-
-        return message, properties
-       
     
