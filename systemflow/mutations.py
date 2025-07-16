@@ -9,6 +9,7 @@ import re
 from systemflow.auxtypes import *
 from systemflow.merges import *
 from systemflow.classifier import *
+from systemflow.metrics import serial_parallel_ops
 
 MutationInputs = namedtuple("MutationInputs", ["msg_fields", "msg_properties", "host_parameters"])
 MutationOutputs = namedtuple("MutationOutputs", ["msg_fields", "msg_properties", "host_properties"])
@@ -222,6 +223,8 @@ class DummyMutate(Mutate):
 
     def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
         #access the required fields/properties/parameters
+
+        #calculate new fields and properties
        
         #create the new fields in the message
         msg_fields = {}
@@ -249,18 +252,19 @@ class CollectImage(Mutate):
         #Input host parameters
         host_parameters = VarCollection(resolution = "resolution (n,n)",
                                     bitdepth = "bit depth (n)",
-                                    sample_rate = "sample rate (Hz)", 
-                                    pixelenergy = "pixel energy (J)",)
+                                    readout = "readout latency (s)",
+                                    pixelenergy = "pixel energy (J)",
+                                    sample_rate = "sample rate (Hz)",)
         
         inputs = MutationInputs(msg_fields, msg_fields, host_parameters)
 
         #Output message fields
         msg_fields = VarCollection(image_data = "image data (B)",
-                                    time = "acquisition time (s)")
+                                   readout = "readout latency (s)",)
 
         #Output message properties
-        msg_properties = VarCollection(resolution = "resolution (n,n)",
-                                          sample_rate = "sample rate (Hz)",)
+        msg_properties = VarCollection(resolution = "resolution (n,n,n)",
+                                       sample_rate = "sample rate (Hz)",)
 
         #Output host properties
         host_properties = VarCollection(sensor_power = "sensor power (W)",)
@@ -269,23 +273,23 @@ class CollectImage(Mutate):
         super().__init__(name, inputs, outputs)
 
     def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
-        #access the required fields/properties/parameters
+        #access the requiredg fields/properties/parameters
         (n_px_x, n_px_y) = component.parameters[self.inputs.host_parameters.resolution] 
         resolution = (n_px_x,
                       n_px_y,
                       component.parameters[self.inputs.host_parameters.bitdepth],)
         n_bytes = np.prod(resolution) / 8.0
-        sample_rate = component.parameters[self.inputs.host_parameters.sample_rate]
-        time = 0.0
+        latency = component.parameters[self.inputs.host_parameters.readout]
         sensor_power = component.parameters[self.inputs.host_parameters.pixelenergy] * n_px_x * n_px_y
+        sample_rate = component.parameters[self.inputs.host_parameters.sample_rate]
 
         #create the new fields in the message
 
         msg_fields = {self.outputs.msg_fields.image_data: n_bytes,
-                    self.outputs.msg_fields.time: time}
+                    self.outputs.msg_fields.readout: latency}
         
         msg_props = {self.outputs.msg_properties.resolution: resolution,
-                     self.outputs.msg_properties.sample_rate: sample_rate,}
+                     self.outputs.msg_properties.sample_rate: sample_rate}
 
         #create the new properties in the host
         host_props = {self.outputs.host_properties.sensor_power: sensor_power,}
@@ -306,21 +310,21 @@ class CollectTemperature(Mutate):
         msg_fields = VarCollection()
 
         #Input host parameters
-        host_parameters = VarCollection(t_bitdepth = "temperature bitdepth (n)",
-                                      t_samplerate = "sample rate (Hz)",
-                                      t_sensor_power = "thermocouple power (W)",)
+        host_parameters = VarCollection(bitdepth = "temperature bitdepth (n)",
+                                      samplerate = "sample rate (Hz)",
+                                      sensor_power = "thermocouple power (W)",)
         
         inputs = MutationInputs(msg_fields, msg_fields, host_parameters)
 
         #Output message fields
-        msg_fields = VarCollection(t_data = "temperature data (B)",
-                                      t_time = "time (s)",)
+        msg_fields = VarCollection(data = "temperature data (B)",
+                                    time = "time (s)",)
 
         #Output message properties
-        msg_properties = VarCollection(t_sample_rate = "sample rate (Hz)",)
+        msg_properties = VarCollection(sample_rate = "sample rate (Hz)",)
 
         #Output host properties
-        host_properties = VarCollection(t_sensor_power = "thermocouple power (W)")
+        host_properties = VarCollection(sensor_power = "thermocouple power (W)")
 
         outputs = MutationOutputs(msg_fields, msg_properties, host_properties)
 
@@ -328,19 +332,19 @@ class CollectTemperature(Mutate):
 
     def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
         #access the required fields/properties/parameters
-        n_bytes = component.parameters[self.inputs.host_parameters.t_bitdepth] / 8.0
-        sample_rate = component.parameters[self.inputs.host_parameters.t_samplerate]
+        n_bytes = component.parameters[self.inputs.host_parameters.bitdepth] / 8.0
+        sample_rate = component.parameters[self.inputs.host_parameters.samplerate]
         time = 0.0
-        sensor_power = component.parameters[self.inputs.host_parameters.t_sensor_power]
+        sensor_power = component.parameters[self.inputs.host_parameters.sensor_power]
 
         #create the new fields in the message
-        msg_fields = {self.outputs.msg_fields.t_data: n_bytes,
-                    self.outputs.msg_fields.t_time: time,}
+        msg_fields = {self.outputs.msg_fields.data: n_bytes,
+                    self.outputs.msg_fields.time: time,}
         
-        msg_props = {self.outputs.msg_properties.t_sample_rate: sample_rate,}
+        msg_props = {self.outputs.msg_properties.sample_rate: sample_rate,}
 
         #create the new properties in the host
-        host_props = {self.outputs.host_properties.t_sensor_power: sensor_power,}
+        host_props = {self.outputs.host_properties.sensor_power: sensor_power,}
 
         return msg_fields, msg_props, host_props
        
@@ -351,12 +355,10 @@ class Convolve(Mutate):
     """
     def __init__(self, name: str = "Convolve"):
         #Input message fields
-        #transform on any field with data (bytes - B)
         msg_fields = VarCollection()
     
         #Input message properties
-        msg_properties = VarCollection(resolution = "resolution (n,n)",
-                                       sample_rate = "sample rate (Hz)",)
+        msg_properties = VarCollection(resolution = "resolution (n,n,n)",)
 
         #Input host parameters
         host_parameters = VarCollection(kernel = "kernel (n,n)",
@@ -379,6 +381,8 @@ class Convolve(Mutate):
 
 
     def transform(self, message: Message, component: 'Component'):
+        """Previously, we defined the inputs and outputs which this mutation has. Now, we create concrete
+           transforms which take those inputs and set the outputs"""
         #access the required fields/properties/parameters
         res = message.properties[self.inputs.msg_properties.resolution]
         kernel_x = component.parameters[self.inputs.host_parameters.kernel][0]
@@ -395,10 +399,12 @@ class Convolve(Mutate):
         #calculate the number of ops required for the kernel
         transform_operations = kernel_ops * kernel_repeats * rate
 
+        """Above, we access the properties from the input message and host component required by the mutation,
+           and calculate the outputs. These are stored in dictionaries and accessed by the host component to update
+           its own properties and output message:"""
         msg_fields = {self.outputs.msg_fields.features: np.prod((steps_x, steps_y, filters)),}
         msg_properties = {}
         component_properties = {self.outputs.host_properties.ops: transform_operations,}
-        
 
         return msg_fields, msg_properties, component_properties
     
@@ -412,39 +418,45 @@ class FourierTransform(Mutate):
         msg_fields = VarCollection()
     
         #Input message properties
-        msg_properties = VarCollection(resolution = "resolution (n,n)",
-                                       bitdepth = "bit depth (n)",
-                                       sample_rate = "sample rate (Hz)",)
+        msg_properties = VarCollection(resolution = "resolution (n,n,n)",)
 
         #Input host parameters
-        host_parameters = VarCollection()
+        host_parameters = VarCollection(parallelism = "parallelism (%)",
+                                        op_latency = "op latency (s)",)
         
         inputs = MutationInputs(msg_fields, msg_properties, host_parameters)
 
         #Output message fields
-        msg_fields = VarCollection(fft = "frequencies (n,n)",)
+        msg_fields = VarCollection(fft_data = "frequency data (B)",
+                                   fft_latency = "fft latency (s)",)
 
         #Output message properties
-        msg_properties = VarCollection(fft_data = "frequency data (B)",)
+        msg_properties = VarCollection(fft = "frequencies (n,n)",)
 
         #Output host properties
-        host_properties = VarCollection(ops = "fft ops (n)",)
+        host_properties = VarCollection(ops = "fft ops (n,n)",)
 
-        outputs = MutationOutputs(msg_fields, msg_fields, host_properties)
+        outputs = MutationOutputs(msg_fields, msg_properties, host_properties)
 
         super().__init__(name, inputs, outputs)
 
 
     def transform(self, message: Message, component: 'Component'):
         #access the required fields/properties/parameters
-        n, m = message.properties[self.inputs.msg_properties.resolution]
-        fft_ops = n * m * np.log10(m) + m * n * np.log10(n)
-        freq_data = n * m * message.properties[self.inputs.msg_properties.bitdepth]
+        n, m, bitdepth = message.properties[self.inputs.msg_properties.resolution]
+        parallelism = component.parameters[self.inputs.host_parameters.parallelism]
+        op_latency = component.parameters[self.inputs.host_parameters.op_latency]
 
-        msg_fields = {self.outputs.msg_fields.fft: (n,m),}
-        msg_properties = {self.outputs.msg_properties.fft_data: freq_data,}
+        fft_ops = n * m * np.log10(m) + m * n * np.log10(n)
+        freq_data = n * m * bitdepth
+        serial_ops, parallel_ops = serial_parallel_ops(fft_ops, parallelism)
+        latency = op_latency * serial_ops
+
+        msg_fields = {self.outputs.msg_fields.fft_data: freq_data,
+                      self.outputs.msg_fields.fft_latency: latency,}
+        msg_properties = {self.outputs.msg_properties.fft: (m,n)}
         msg_properties = {}
-        component_properties = {self.outputs.host_properties.ops: fft_ops,}
+        component_properties = {self.outputs.host_properties.ops: (serial_ops, parallel_ops),}
         
 
         return msg_fields, msg_properties, component_properties
@@ -526,4 +538,73 @@ class ClassifiedStorageRate(Mutate):
     def transform(self, message: Message, component: 'Component'):
         storage_rate = message.fields[self.inputs.msg_fields.total_data] * get_passed(message.properties[self.inputs.msg_properties.error_matrix])
         new_host_properties = {self.outputs.host_properties.storage_rate: storage_rate,}
+        return {}, {}, new_host_properties
+    
+class DataRate(Mutate):
+    def __init__(self, name: str = "DataRate"):
+        #Input message fields
+        #transform on any field with data (bytes - B)
+        msg_fields = VarCollection(bytes = Regex(r"\(B\)"),)
+    
+        #Input message properties
+        msg_properties = VarCollection()
+
+        #Input host parameters
+        host_parameters = VarCollection()
+        
+        inputs = MutationInputs(msg_fields, msg_properties, host_parameters)
+
+        #Output message fields
+        msg_fields = VarCollection()
+
+        #Output message properties
+        msg_properties = VarCollection()
+
+        #Output host properties
+        host_properties = VarCollection(total_data = "total data (B)",)
+
+        outputs = MutationOutputs(msg_fields, msg_properties, host_properties)
+
+        super().__init__(name, inputs, outputs)
+
+    def transform(self, message: Message, component: 'Component'):
+        total_data = 0.0
+        data_unit = self.inputs.msg_fields.bytes.str
+        for (key, value) in message.fields.items():
+            if bool(re.search(data_unit, key)) and key != "total data":
+                total_data += value
+
+        new_msg_fields = {self.outputs.host_properties.total_data: total_data}
+        return new_msg_fields, {}, {}
+    
+class StorageRate(Mutate):
+    def __init__(self, name: str = "StorageRate"):
+        #Input message fields
+        #transform on any field with data (bytes - B)
+        msg_fields = VarCollection(total_data = "total data (B)",)
+    
+        #Input message properties
+        msg_properties = VarCollection(sample_rate = "sample rate (Hz)",)
+
+        #Input host parameters
+        host_parameters = VarCollection()
+        
+        inputs = MutationInputs(msg_fields, msg_properties, host_parameters)
+
+        #Output message fields
+        msg_fields = VarCollection()
+
+        #Output message properties
+        msg_properties = VarCollection()
+
+        #Output host properties
+        host_properties = VarCollection(storage_rate = "data rate (B/s)",)
+
+        outputs = MutationOutputs(msg_fields, msg_fields, host_properties)
+
+        super().__init__(name, inputs, outputs)
+
+    def transform(self, message: Message, component: 'Component'):
+        storage_rate = message.fields[self.inputs.msg_fields.total_data] * message.properties[self.inputs.msg_properties.sample_rate]
+        new_host_properties = {self.outputs.host_properties.storage_rate: storage_rate}
         return {}, {}, new_host_properties

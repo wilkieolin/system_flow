@@ -14,6 +14,17 @@ class VarCollection:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
+    def __repr__(self):
+        if not self.__dict__:
+            return f"{self.__class__.__name__}()"
+
+        items_str = ",\n    ".join(f"{key}={value!r}" for key, value in self.__dict__.items())
+        return f"{self.__class__.__name__}(\n    {items_str}\n)"
+
 class Regex:
     def __init__(self, str):
         self.str = str
+
+def is_proportion(value: float):
+    assert 0.0 <= value <= 1.0, "Must be on the domain [0.0, 1.0]"
+    
