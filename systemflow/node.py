@@ -568,13 +568,13 @@ class ExecutionGraph(ABC):
     
 
 class Metric(ABC):
-    def __init__(self, name: str, msg_fields: list[str], msg_properties: list[str], host_properties: dict[str]):
+    def __init__(self, name: str, msg_fields: list[str] = [], msg_properties: list[str] = [], host_properties: dict[str] = []):
         self.name = name
         self.msg_fields = msg_fields
         self.msg_properties = msg_properties
         self.host_properties = host_properties
 
-    def _missing_keys(self, matches: list, values: list) -> str:
+    def _missing_keys(self, matches: list, values: VarCollection) -> str:
         """
         Helper function to generate a comma-separated string of missing items.
 
@@ -588,11 +588,29 @@ class Metric(ABC):
         missing = []
         for (i,m) in enumerate(matches):
             if not m:
-                missing.append(values[i])
+                x = list(values.__dict__.values())[i]
+                if type(x) == Regex:
+                    missing.append("Unit regex: " + x.str)
+                else:
+                    missing.append(x)
 
         missing_fields = reduce(lambda x, y: x + ", " + y, missing)
         return missing_fields
     
+    def _get_matches(self, d: dict, vars: VarCollection) -> list:
+        requests = vars.__dict__.values()
+
+        matches = []
+        for r in requests:
+            if type(r) == Regex:
+                match = True in [bool(re.search(r.str, f)) for f in d.keys()]
+                matches.append(match)
+            else:
+                matches.append(r in d.keys())
+
+        return matches
+        
+
     def _field_check(self, message: Message) -> None:
         """
         Checks if all required message fields are present in the incoming message.
@@ -603,13 +621,13 @@ class Metric(ABC):
         Raises:
             AssertionError: If any of the fields specified in `self.msg_fields` are missing.
         """
-        matches = [f in message.fields.keys() for f in self.msg_fields]
+        matches = self._get_matches(message.fields, self.inputs.msg_fields)
         field_chk = np.all(matches)
         if not field_chk:
-            missing = self._missing_keys(matches, self.msg_fields)
-            assert field_chk, "Input field for metric " + self.name + " not found in incoming message: " + missing
+            missing = self._missing_keys(matches, self.inputs.msg_fields)
+            assert field_chk, "Input field for transform " + self.name + " not found in incoming message: " + missing
 
-    def _msg_property_check(self, message: Message) -> None:
+    def _property_check(self, message: Message) -> None:
         """
         Checks if all required message properties are present in the incoming message.
 
@@ -619,27 +637,28 @@ class Metric(ABC):
         Raises:
             AssertionError: If any of the properties specified in `self.msg_properties` are missing.
         """
-        matches = [f in message.properties.keys() for f in self.msg_properties]
+        matches = self._get_matches(message.properties, self.inputs.msg_properties)
         props_chk = np.all(matches)
         if not props_chk:
-            missing = self._missing_keys(matches, self.msg_properties)
-            assert props_chk, self.name + " metric's properties not found in incoming message: " + missing
+            missing = self._missing_keys(matches, self.inputs.msg_properties)
+            assert props_chk, self.name + " transform's properties not found in incoming message: " + missing
     
-    def _host_property_check(self, all_properties: dict[str]) -> None:
+    def _param_check(self, component: 'Component') -> None:
         """
-        Checks if all required host properties are present in the host ExecutionGraph.
+        Checks if all required host parameters are present in the host Component.
 
         Args:
             component: The host Component object.
 
         Raises:
-            AssertionError: If any of the properties specified in `self.host_properties` are missing.
+            AssertionError: If any of the parameters specified in `self.host_parameters` are missing.
         """
-        for (k,v) in self.host_properties.items():
-            assert k in all_properties.keys(), "Missing component" + str(k) + " from properties"
-            props = all_properties[k]
-            assert v in props.keys(), "Missing property " + str(v) + " from component " + str(k)
-        
+        matches = self._get_matches(component.parameters, self.inputs.host_parameters)
+        params_chk = np.all(matches)
+        if not params_chk:
+            missing = self._missing_keys(matches, self.inputs.host_parameters)
+            assert params_chk, self.name + " transform's control parameters not found in host component: " + missing
+
 
     def metric(self, graph: ExecutionGraph) -> dict[str]:
         """
@@ -692,17 +711,28 @@ class System(ABC):
     """
     Represents a higher-level system composed of one or more ExecutionGraphs.
 
-    When a System is called, it executes all of its contained ExecutionGraphs.
+    When a System is called, its flow_control function orchestrates the order of execution graphs.
+    The output of each graph is stored in execution_history, and the system's iteration is increased. 
 
     Attributes:
         name (str): The name of the system.
         exec_graphs (list[ExecutionGraph]): A list of ExecutionGraphs managed by this system.
-        iter (int): A counter for system-level iterations (currently not incremented in __call__).
+        iter (int): A counter for system-level iterations 
     """
-    def __init__(self, name: str, exec_graphs: list[ExecutionGraph], iter: int = 0):
+    def __init__(self, name: str, exec_graphs: list[ExecutionGraph], iter: int = 0, execution_history: list[ExecutionGraph] = []):
         self.name = name
         self.exec_graphs = exec_graphs
+        self.exeuction_history = execution_history
         self.iter = iter
+
+    def flow_control(self): 
+        """
+        User-replacable function which determines what order graphs execute in and how they
+        interchange control, repeat, etc.
+        """
+        #dummy control flow executs all graphs in order, once
+        new_graphs = [graph() for graph in self.exec_graphs]
+
 
     def __call__(self) -> 'System':
         """
@@ -713,8 +743,8 @@ class System(ABC):
             The iteration count of the new System is incremented (Note: original code had self.iter + 1,
             but self.iter was not an attribute, assuming it meant to track system iterations).
         """
-        new_graphs = [graph() for graph in self.exec_graphs]
-        new_system = System(self.name, new_graphs, getattr(self, 'iter', 0) + 1)
+        new_graphs = self.flow_control()
+        new_system = System(self.name, self.exec_graphs, execution_history=new_graphs, iter=getattr(self, 'iter', 0) + 1)
         return new_system
     
 

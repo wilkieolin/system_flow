@@ -25,6 +25,107 @@ def collect_parameters(mutations: list['Mutate'], to_dict: bool = False) -> dict
         collection = VarCollection(**host_params_dict)
         return collection
 
+"""
+Given a set of inputs for a mutation, metric, or other process, check to see if these are present
+in the incoming message and on the host component.
+"""
+class RequirementChecker(ABC):
+    def __init__(self, inputs: MutationInputs):
+        self.inputs = inputs
+
+    def _missing_keys(self, matches: list, values: VarCollection) -> str:
+        """
+        Helper function to generate a comma-separated string of missing items.
+
+        Args:
+            matches: A list of booleans indicating presence (True) or absence (False).
+            values: A list of corresponding item names.
+
+        Returns:
+            A string listing the names of items where `matches` was False.
+        """
+        missing = []
+        for (i,m) in enumerate(matches):
+            if not m:
+                x = list(values.__dict__.values())[i]
+                if type(x) == Regex:
+                    missing.append("Unit regex: " + x.str)
+                else:
+                    missing.append(x)
+
+        missing_fields = reduce(lambda x, y: x + ", " + y, missing)
+        return missing_fields
+    
+    def _get_matches(self, d: dict, vars: VarCollection) -> list:
+        requests = vars.__dict__.values()
+
+        matches = []
+        for r in requests:
+            if type(r) == Regex:
+                match = True in [bool(re.search(r.str, f)) for f in d.keys()]
+                matches.append(match)
+            else:
+                matches.append(r in d.keys())
+
+        return matches
+        
+
+    def _field_check(self, message: Message) -> None:
+        """
+        Checks if all required message fields are present in the incoming message.
+
+        Args:
+            message: The input Message object.
+
+        Raises:
+            AssertionError: If any of the fields specified in `self.msg_fields` are missing.
+        """
+        matches = self._get_matches(message.fields, self.inputs.msg_fields)
+        field_chk = np.all(matches)
+        if not field_chk:
+            missing = self._missing_keys(matches, self.inputs.msg_fields)
+            assert field_chk, "Input field for transform " + self.name + " not found in incoming message: " + missing
+
+    def _property_check(self, message: Message) -> None:
+        """
+        Checks if all required message properties are present in the incoming message.
+
+        Args:
+            message: The input Message object.
+
+        Raises:
+            AssertionError: If any of the properties specified in `self.msg_properties` are missing.
+        """
+        matches = self._get_matches(message.properties, self.inputs.msg_properties)
+        props_chk = np.all(matches)
+        if not props_chk:
+            missing = self._missing_keys(matches, self.inputs.msg_properties)
+            assert props_chk, self.name + " transform's properties not found in incoming message: " + missing
+    
+    def _param_check(self, component: 'Component') -> None:
+        """
+        Checks if all required host parameters are present in the host Component.
+
+        Args:
+            component: The host Component object.
+
+        Raises:
+            AssertionError: If any of the parameters specified in `self.host_parameters` are missing.
+        """
+        matches = self._get_matches(component.parameters, self.inputs.host_parameters)
+        params_chk = np.all(matches)
+        if not params_chk:
+            missing = self._missing_keys(matches, self.inputs.host_parameters)
+            assert params_chk, self.name + " transform's control parameters not found in host component: " + missing
+
+    def __call__(self, message: Message, component: 'Component') -> None:
+        #check that all incoming messages have the field(s)/parameters necessary for the transform
+        self._field_check(message)
+        #check that the incoming message has the parameters necessary for the transform
+        self._property_check(message)
+        #check that the host component has the parameters necessary for the transform
+        self._param_check(component)
+
 
 """
 Abstract class which defines the template for component augmentation operatiuons.
@@ -46,6 +147,7 @@ class Mutate(ABC):
         self.name = name
         self.inputs = inputs
         self.outputs = outputs
+        self.check = RequirementChecker(inputs)
 
     def _missing_keys(self, matches: list, values: VarCollection) -> str:
         """
@@ -174,12 +276,7 @@ class Mutate(ABC):
             - new_message: The transformed Message object.
             - new_host_props: A dictionary of new properties for the host component.
         """
-        #check that all incoming messages have the field(s)/parameters necessary for the transform
-        self._field_check(message)
-        #check that the incoming message has the parameters necessary for the transform
-        self._property_check(message)
-        #check that the host component has the parameters necessary for the transform
-        self._param_check(component)
+        self.check(message, component)
 
         #create independent copies of the message and component
         component = deepcopy(component)
