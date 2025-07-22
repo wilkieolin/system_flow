@@ -8,6 +8,7 @@ from functools import reduce
 from typing import Callable, Any
 from itertools import accumulate
 from collections.abc import Iterable
+import re
 
 from systemflow.auxtypes import *
 from systemflow.merges import *
@@ -563,104 +564,55 @@ class ExecutionGraph(ABC):
         #calculate metrics
         metrics = [metric(exg) for metric in self.metrics]
         #store the metrics
-        exg.metric_values = metrics
+        if len(metrics) > 0:
+            exg.metric_values = reduce(lambda x, y: x | y, metrics)
         return exg
     
 
+
 class Metric(ABC):
-    def __init__(self, name: str, msg_fields: list[str] = [], msg_properties: list[str] = [], host_properties: dict[str] = []):
+    def __init__(self, name: str, msg_queries: list[Regex], host_queries: list[Regex]):
         self.name = name
-        self.msg_fields = msg_fields
-        self.msg_properties = msg_properties
-        self.host_properties = host_properties
+        self.msg_queries = msg_queries
+        self.host_queries = host_queries
 
-    def _missing_keys(self, matches: list, values: VarCollection) -> str:
+    def message_matches(self, message: Message) -> list:
         """
-        Helper function to generate a comma-separated string of missing items.
-
-        Args:
-            matches: A list of booleans indicating presence (True) or absence (False).
-            values: A list of corresponding item names.
-
-        Returns:
-            A string listing the names of items where `matches` was False.
+        Extract all matches to the property requests in the final message's fields and properties
         """
-        missing = []
-        for (i,m) in enumerate(matches):
-            if not m:
-                x = list(values.__dict__.values())[i]
-                if type(x) == Regex:
-                    missing.append("Unit regex: " + x.str)
-                else:
-                    missing.append(x)
-
-        missing_fields = reduce(lambda x, y: x + ", " + y, missing)
-        return missing_fields
-    
-    def _get_matches(self, d: dict, vars: VarCollection) -> list:
-        requests = vars.__dict__.values()
-
+        requests = self.msg_queries
         matches = []
+        all_data = message.fields | message.properties
         for r in requests:
-            if type(r) == Regex:
-                match = True in [bool(re.search(r.str, f)) for f in d.keys()]
-                matches.append(match)
+            if isinstance(r, Regex):
+                for key, value in all_data.items():
+                    if re.search(r.str, key):
+                        matches.append(value)
             else:
-                matches.append(r in d.keys())
+                if r in all_data:
+                    matches.append(all_data[r])
 
         return matches
-        
-
-    def _field_check(self, message: Message) -> None:
-        """
-        Checks if all required message fields are present in the incoming message.
-
-        Args:
-            message: The input Message object.
-
-        Raises:
-            AssertionError: If any of the fields specified in `self.msg_fields` are missing.
-        """
-        matches = self._get_matches(message.fields, self.inputs.msg_fields)
-        field_chk = np.all(matches)
-        if not field_chk:
-            missing = self._missing_keys(matches, self.inputs.msg_fields)
-            assert field_chk, "Input field for transform " + self.name + " not found in incoming message: " + missing
-
-    def _property_check(self, message: Message) -> None:
-        """
-        Checks if all required message properties are present in the incoming message.
-
-        Args:
-            message: The input Message object.
-
-        Raises:
-            AssertionError: If any of the properties specified in `self.msg_properties` are missing.
-        """
-        matches = self._get_matches(message.properties, self.inputs.msg_properties)
-        props_chk = np.all(matches)
-        if not props_chk:
-            missing = self._missing_keys(matches, self.inputs.msg_properties)
-            assert props_chk, self.name + " transform's properties not found in incoming message: " + missing
     
-    def _param_check(self, component: 'Component') -> None:
+    def graph_matches(self, graph_properties: dict) -> list:
         """
-        Checks if all required host parameters are present in the host Component.
-
-        Args:
-            component: The host Component object.
-
-        Raises:
-            AssertionError: If any of the parameters specified in `self.host_parameters` are missing.
+        For every component in the graph, extract all matches to the property requests
         """
-        matches = self._get_matches(component.parameters, self.inputs.host_parameters)
-        params_chk = np.all(matches)
-        if not params_chk:
-            missing = self._missing_keys(matches, self.inputs.host_parameters)
-            assert params_chk, self.name + " transform's control parameters not found in host component: " + missing
+        requests = self.host_queries
+        matches = []
+        for host_name, properties in graph_properties.items():
+            for r in requests:
+                if isinstance(r, Regex):
+                    for key, value in properties.items():
+                        if bool(re.search(r.str, key)):
+                            matches.append(value)
+                else:
+                    if r in properties.keys():
+                        matches.append(properties[r])
 
+        return matches
 
-    def metric(self, graph: ExecutionGraph) -> dict[str]:
+    def metric(self, message: Message, properties: dict) -> dict[str]:
         """
         The core metric logic to be implemented by subclasses.
 
@@ -675,6 +627,9 @@ class Metric(ABC):
         Returns:
             metrics: A dictionary of metrics to be stored in the host graph
         """
+        msg_matches = self.message_matches(message)
+        graph_matches = self.graph_matches(properties)
+
         metrics = {}
         return metrics
 
@@ -693,14 +648,9 @@ class Metric(ABC):
             metrics: A dictionary of metrics to be stored in the host graph
         """
         message = graph.root_node.output_msg
-        #check that the graph output message has the field(s)/parameters necessary for the transform
-        self._field_check(message)
-        #check that the graph output message has the parameters necessary for the transform
-        self._msg_property_check(message)
-        #check that the host component has the parameters necessary for the transform
-        self._host_property_check(graph.get_all_node_properties())
-
-        metrics = self.metric(graph)
+        properties = graph.get_all_node_properties()
+        self.metric(message, properties)
+        metrics = self.metric(message, properties)
         return metrics
 
 
