@@ -521,9 +521,9 @@ class ExecutionGraph(ABC):
             if node.name in new_parameters_map.keys():
                 new_parameters = node.parameters | new_parameters_map[node.name]
                 new_mutations = [mutation.__class__() for mutation in node.mutations]
-                new_node = Component(node.name, new_mutations, parameters=new_parameters)
+                new_node = Component(node.name, new_mutations, parameters=new_parameters, merge=node.merge)
             else:
-                new_node = Component(node.name, node.mutations, parameters=node.parameters)
+                new_node = Component(node.name, node.mutations, parameters=node.parameters, merge=node.merge)
             new_nodes.append(new_node)
         
         # Create a new ExecutionGraph with updated nodes but same links and iteration count
