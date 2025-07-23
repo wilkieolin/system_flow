@@ -30,7 +30,8 @@ Given a set of inputs for a mutation, metric, or other process, check to see if 
 in the incoming message and on the host component.
 """
 class RequirementChecker(ABC):
-    def __init__(self, inputs: MutationInputs):
+    def __init__(self, name: str, inputs: MutationInputs):
+        self.name = name
         self.inputs = inputs
 
     def _missing_keys(self, matches: list, values: VarCollection) -> str:
@@ -150,7 +151,7 @@ class Mutate(ABC):
         self.name = name
         self.inputs = inputs
         self.outputs = outputs
-        self.check = RequirementChecker(inputs)
+        self.check = RequirementChecker(name, inputs)
     
     def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
         """
@@ -278,7 +279,8 @@ class CollectImage(Mutate):
                                    readout = "readout latency (s)",)
 
         #Output message properties
-        msg_properties = VarCollection(resolution = "resolution (n,n,n)",
+        msg_properties = VarCollection(resolution = "resolution (n,n)",
+                                       bitdepth = "bitdepth (n)",
                                        sample_rate = "sample rate (Hz)",)
 
         #Output host properties
@@ -289,13 +291,11 @@ class CollectImage(Mutate):
 
     def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
         #access the requiredg fields/properties/parameters
-        (n_px_x, n_px_y) = component.parameters[self.inputs.host_parameters.resolution] 
-        resolution = (n_px_x,
-                      n_px_y,
-                      component.parameters[self.inputs.host_parameters.bitdepth],)
-        n_bytes = np.prod(resolution) / 8.0
+        resolution = component.parameters[self.inputs.host_parameters.resolution] 
+        bitdepth = component.parameters[self.inputs.host_parameters.bitdepth]
+        n_bytes = np.prod(resolution) * bitdepth / 8.0
         latency = component.parameters[self.inputs.host_parameters.readout]
-        sensor_power = component.parameters[self.inputs.host_parameters.pixelenergy] * n_px_x * n_px_y
+        sensor_power = component.parameters[self.inputs.host_parameters.pixelenergy] * np.prod(resolution)
         sample_rate = component.parameters[self.inputs.host_parameters.sample_rate]
 
         #create the new fields in the message
@@ -304,6 +304,7 @@ class CollectImage(Mutate):
                     self.outputs.msg_fields.readout: latency}
         
         msg_props = {self.outputs.msg_properties.resolution: resolution,
+                     self.outputs.msg_properties.bitdepth: bitdepth,
                      self.outputs.msg_properties.sample_rate: sample_rate}
 
         #create the new properties in the host
@@ -326,7 +327,7 @@ class CollectTemperature(Mutate):
 
         #Input host parameters
         host_parameters = VarCollection(bitdepth = "temperature bitdepth (n)",
-                                      samplerate = "sample rate (Hz)",
+                                      sample_rate = "sample rate (Hz)",
                                       sensor_power = "thermocouple power (W)",)
         
         inputs = MutationInputs(msg_fields, msg_fields, host_parameters)
@@ -348,7 +349,7 @@ class CollectTemperature(Mutate):
     def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
         #access the required fields/properties/parameters
         n_bytes = component.parameters[self.inputs.host_parameters.bitdepth] / 8.0
-        sample_rate = component.parameters[self.inputs.host_parameters.samplerate]
+        sample_rate = component.parameters[self.inputs.host_parameters.sample_rate]
         time = 0.0
         sensor_power = component.parameters[self.inputs.host_parameters.sensor_power]
 
@@ -373,7 +374,8 @@ class Convolve(Mutate):
         msg_fields = VarCollection()
     
         #Input message properties
-        msg_properties = VarCollection(resolution = "resolution (n,n,n)",)
+        msg_properties = VarCollection(resolution = "resolution (n,n)",
+                                       sample_rate = "sample rate (Hz)",)
 
         #Input host parameters
         host_parameters = VarCollection(kernel = "kernel (n,n)",
@@ -423,7 +425,7 @@ class Convolve(Mutate):
 
         return msg_fields, msg_properties, component_properties
     
-class FourierTransform(Mutate):
+class FourierTransform2D(Mutate):
     """
     Models the operations and resources used during a forward or inverse (Fast) Fourier operation.
     """
@@ -433,7 +435,8 @@ class FourierTransform(Mutate):
         msg_fields = VarCollection()
     
         #Input message properties
-        msg_properties = VarCollection(resolution = "resolution (n,n,n)",)
+        msg_properties = VarCollection(resolution = "resolution (n,n)",
+                                       bitdepth = "bitdepth (n)",)
 
         #Input host parameters
         host_parameters = VarCollection(parallelism = "parallelism (%)",
@@ -458,7 +461,10 @@ class FourierTransform(Mutate):
 
     def transform(self, message: Message, component: 'Component'):
         #access the required fields/properties/parameters
-        n, m, bitdepth = message.properties[self.inputs.msg_properties.resolution]
+        resolution = message.properties[self.inputs.msg_properties.resolution]
+        m = resolution[0]
+        n = resolution[1] 
+        bitdepth = message.properties[self.inputs.msg_properties.bitdepth]
         parallelism = component.parameters[self.inputs.host_parameters.parallelism]
         op_latency = component.parameters[self.inputs.host_parameters.op_latency]
 

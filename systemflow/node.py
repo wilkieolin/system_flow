@@ -513,31 +513,25 @@ class ExecutionGraph(ABC):
             graph from which it was derived, as this is a configuration change,
             not an execution step.
         """
-        updated_components = []
-        # self.nodes stores the original list of Component instances
-        for original_component in self.nodes:
-            component_name = original_component.name
-            # Start with a copy of the component's current parameters
-            updated_params = original_component.parameters.copy()
 
-            if component_name in new_parameters_map:
-                # Merge/update with the new parameters provided for this component
-                updated_params.update(new_parameters_map[component_name])
+        # Create new nodes by calling their constructors
+        new_nodes = []
 
-            new_comp = Component(
-                name=original_component.name,
-                mutations=original_component.mutations,
-                parameters=updated_params,
-                properties=original_component.properties,  # Use initial properties
-                merge=original_component.merge
-            )
-            updated_components.append(new_comp)
-
+        for node in self.nodes:
+            if node.name in new_parameters_map.keys():
+                new_parameters = node.parameters | new_parameters_map[node.name]
+                new_mutations = [mutation.__class__() for mutation in node.mutations]
+                new_node = Component(node.name, new_mutations, parameters=new_parameters)
+            else:
+                new_node = Component(node.name, node.mutations, parameters=node.parameters)
+            new_nodes.append(new_node)
+        
+        # Create a new ExecutionGraph with updated nodes but same links and iteration count
         return ExecutionGraph(
             name=self.name,
-            nodes=updated_components,
+            nodes=new_nodes,
             links=self.links,
-            metrics=self.metrics,
+            metrics=[metric.__class__() for metric in self.metrics],
             iteration=self.iteration
         )
     
@@ -696,6 +690,5 @@ class System(ABC):
         new_graphs = self.flow_control()
         new_system = System(self.name, self.exec_graphs, execution_history=new_graphs, iter=getattr(self, 'iter', 0) + 1)
         return new_system
-    
 
-    
+

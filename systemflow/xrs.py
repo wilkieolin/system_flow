@@ -72,7 +72,7 @@ class FlatFieldCorrection(Mutate):
         msg_fields = VarCollection()
     
         #Input message properties
-        msg_properties = VarCollection(resolution = "resolution (n,n,n)",)
+        msg_properties = VarCollection(resolution = "resolution (n,n)",)
 
         #Input host parameters
         host_parameters = VarCollection(op_latency = "op latency (s)",
@@ -107,7 +107,6 @@ class FlatFieldCorrection(Mutate):
         msg_props = {}
 
         #create the new properties in the host
-        resolution = message.properties[self.inputs.msg_properties.resolution]
         host_props = {self.outputs.host_properties.ops: (serial_ops, parallel_ops),}
 
         return msg_fields, msg_props, host_props
@@ -121,7 +120,7 @@ class MaskCorrection(Mutate):
         msg_fields = VarCollection(image_data = "image data (B)")
     
         #Input message properties
-        msg_properties = VarCollection(resolution = "resolution (n,n,n)",)
+        msg_properties = VarCollection(resolution = "resolution (n,n)",)
 
         #Input host parameters
         host_parameters = VarCollection(mask_proportion = "masking proportion (%)",
@@ -148,7 +147,7 @@ class MaskCorrection(Mutate):
         #access the required fields/properties/parameters
         image_data = message.fields[self.inputs.msg_fields.image_data]
         resolution = message.properties[self.inputs.msg_properties.resolution]
-        resolution_x, resolution_y, _ = resolution
+        resolution_x, resolution_y = resolution
         
         masking = component.parameters[self.inputs.host_parameters.mask_proportion]
         op_latency = component.parameters[self.inputs.host_parameters.op_latency]
@@ -179,7 +178,7 @@ class MaskCorrection(Mutate):
 
         return msg_fields, msg_props, host_props
     
-class PhaseReconstruction(Mutate):
+class PhaseReconstruction2D(Mutate):
     """
     A blank template which can be used to define mutations
     """
@@ -188,7 +187,8 @@ class PhaseReconstruction(Mutate):
         msg_fields = VarCollection(image_data = "image data (B)",)
     
         #Input message properties
-        msg_properties = VarCollection(resolution = "resolution (n,n,n)",)
+        msg_properties = VarCollection(resolution = "resolution (n,n)",
+                                       bitdepth = "bitdepth (n)",)
 
         #Input host parameters
         host_parameters = VarCollection(op_latency = "op latency (s)",
@@ -201,7 +201,7 @@ class PhaseReconstruction(Mutate):
         msg_fields = VarCollection(phase_support = "phase data (B)",)
 
         #Output message properties
-        msg_properties = VarCollection(phase = "phase reconstruction (m,n)",
+        msg_properties = VarCollection(phase = "phase reconstruction (n,n)",
                                        latency = "phase reconstruction latency (s)",)
 
         #Output host properties
@@ -213,7 +213,8 @@ class PhaseReconstruction(Mutate):
     def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
         #access the required fields/properties/parameters
         #calculate the error between the predicted and 
-        n, m, bitdepth = message.properties[self.inputs.msg_properties.resolution]
+        n, m = message.properties[self.inputs.msg_properties.resolution]
+        bitdepth = message.properties[self.inputs.msg_properties.bitdepth]
         parallelism = component.parameters[self.inputs.host_parameters.parallelism]
         op_latency = component.parameters[self.inputs.host_parameters.op_latency]
         iterations = component.parameters[self.inputs.host_parameters.iterations]
@@ -226,7 +227,6 @@ class PhaseReconstruction(Mutate):
         serial_ops, parallel_ops = serial_parallel_ops(total_ops, parallelism)
         latency = op_latency * serial_ops
         
-
         msg_fields = {self.outputs.msg_fields.phase_support: support_data,}
         
         msg_props = {self.outputs.msg_properties.phase: (m,n),
