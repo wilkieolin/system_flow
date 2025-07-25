@@ -1,3 +1,8 @@
+"""
+Copyright 2025, UChicago Argonne LLC. 
+Please refer to 'license' in the root directory for details and disclosures.
+"""
+
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd

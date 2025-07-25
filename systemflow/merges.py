@@ -1,3 +1,8 @@
+"""
+Copyright 2025, UChicago Argonne LLC. 
+Please refer to 'license' in the root directory for details and disclosures.
+"""
+
 import numpy as np
 from abc import ABC, abstractmethod
 from collections import namedtuple

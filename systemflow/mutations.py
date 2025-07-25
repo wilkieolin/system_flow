@@ -1,3 +1,8 @@
+"""
+Copyright 2025, UChicago Argonne LLC. 
+Please refer to 'license' in the root directory for details and disclosures.
+"""
+
 # Mutations
 import numpy as np
 from abc import ABC, abstractmethod
@@ -9,204 +14,9 @@ import re
 from systemflow.auxtypes import *
 from systemflow.merges import *
 from systemflow.classifier import *
+from systemflow.node import *
 from systemflow.metrics import serial_parallel_ops
 
-MutationInputs = namedtuple("MutationInputs", ["msg_fields", "msg_properties", "host_parameters"])
-MutationOutputs = namedtuple("MutationOutputs", ["msg_fields", "msg_properties", "host_properties"])
-
-def collect_parameters(mutations: list['Mutate'], to_dict: bool = False) -> dict:
-    host_params_dict = {}
-    for mutation in mutations:
-        for (k, v) in mutation.inputs.host_parameters.__dict__.items():
-            host_params_dict[k] = v
-    if to_dict:
-        return host_params_dict
-    else:
-        collection = VarCollection(**host_params_dict)
-        return collection
-
-"""
-Given a set of inputs for a mutation, metric, or other process, check to see if these are present
-in the incoming message and on the host component.
-"""
-class RequirementChecker(ABC):
-    def __init__(self, name: str, inputs: MutationInputs):
-        self.name = name
-        self.inputs = inputs
-
-    def _missing_keys(self, matches: list, values: VarCollection) -> str:
-        """
-        Helper function to generate a comma-separated string of missing items.
-
-        Args:
-            matches: A list of booleans indicating presence (True) or absence (False).
-            values: A list of corresponding item names.
-
-        Returns:
-            A string listing the names of items where `matches` was False.
-        """
-        missing = []
-        for (i,m) in enumerate(matches):
-            if not m:
-                x = list(values.__dict__.values())[i]
-                if type(x) == Regex:
-                    missing.append("Unit regex: " + x.str)
-                else:
-                    missing.append(x)
-
-        missing_fields = reduce(lambda x, y: x + ", " + y, missing)
-        return missing_fields
-    
-    def _get_matches(self, d: dict, vars: VarCollection) -> list:
-        requests = vars.__dict__.values()
-
-        matches = []
-        for r in requests:
-            if type(r) == Regex:
-                match = True in [bool(re.search(r.str, f)) for f in d.keys()]
-                matches.append(match)
-            else:
-                matches.append(r in d.keys())
-
-        return matches
-        
-
-    def _field_check(self, message: Message) -> None:
-        """
-        Checks if all required message fields are present in the incoming message.
-
-        Args:
-            message: The input Message object.
-
-        Raises:
-            AssertionError: If any of the fields specified in `self.msg_fields` are missing.
-        """
-        matches = self._get_matches(message.fields, self.inputs.msg_fields)
-        field_chk = np.all(matches)
-        if not field_chk:
-            missing = self._missing_keys(matches, self.inputs.msg_fields)
-            assert field_chk, "Input field for transform " + self.name + " not found in incoming message: " + missing
-
-    def _property_check(self, message: Message) -> None:
-        """
-        Checks if all required message properties are present in the incoming message.
-
-        Args:
-            message: The input Message object.
-
-        Raises:
-            AssertionError: If any of the properties specified in `self.msg_properties` are missing.
-        """
-        matches = self._get_matches(message.properties, self.inputs.msg_properties)
-        props_chk = np.all(matches)
-        if not props_chk:
-            missing = self._missing_keys(matches, self.inputs.msg_properties)
-            assert props_chk, self.name + " transform's properties not found in incoming message: " + missing
-    
-    def _param_check(self, object: 'Component') -> None:
-        """
-        Checks if all required host parameters are present in the host Component.
-
-        Args:
-            component: The host Component object.
-
-        Raises:
-            AssertionError: If any of the parameters specified in `self.host_parameters` are missing.
-        """
-        parameters = object.parameters 
-        matches = self._get_matches(parameters, self.inputs.host_parameters)
-        params_chk = np.all(matches)
-
-
-        if not params_chk:
-            missing = self._missing_keys(matches, self.inputs.host_parameters)
-            assert params_chk, self.name + " transform's control parameters not found in host component: " + missing
-
-    def __call__(self, message: Message, object: 'Component') -> None:
-        #check that all incoming messages have the field(s)/parameters necessary for the transform
-        self._field_check(message)
-        #check that the incoming message has the parameters necessary for the transform
-        self._property_check(message)
-        #check that the host component has the parameters necessary for the transform
-        self._param_check(object)
-
-
-"""
-Abstract class which defines the template for component augmentation operatiuons.
-Mutate transforms take a set of input fields/properties from an incoming message
-and/or parameters from its host component to create or change fields in the message
-and properties in the host component.
-These transforms can impart a set of properties (power consumption, etc) on the host component.
-"""
-class Mutate(ABC):
-    """
-    Abstract Base Class for operations that transform a Message and/or its host Component.
-
-    A Mutate object defines a specific transformation, specifying the required
-    input message fields, message properties, and host component parameters.
-    When called, it applies this transformation and can update the message
-    and/or add new properties to the host component.
-    """
-    def __init__(self, name: str, inputs: MutationInputs, outputs: MutationOutputs):
-        self.name = name
-        self.inputs = inputs
-        self.outputs = outputs
-        self.check = RequirementChecker(name, inputs)
-    
-    def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
-        """
-        The core transformation logic to be implemented by subclasses.
-
-        This method should access data from the `message` (fields and properties)
-        and `component` (parameters), perform calculations, and return new
-        data to be incorporated into the output message and host component.
-
-        Args:
-            message: The input Message object (a deep copy).
-            component: The host Component object (a deep copy).
-
-        Returns:
-            A tuple containing three dictionaries:
-            - new_msg_fields: New fields to be added to or overwrite in the message.
-            - new_msg_properties: New properties to be added to or overwrite in the message.
-            - new_host_properties: New properties to be added to or overwrite in the host component.
-        """
-        new_msg_fields = {}
-        new_msg_properties = {}
-        new_host_properties = {}
-        
-        # USER - calculate new fields/properties for message/component here
-        return new_msg_fields, new_msg_properties, new_host_properties
-    
-    def __call__(self, message: Message, component: 'Component') -> tuple[Message, dict]:
-        """
-        Applies the mutation to a message and its host component.
-
-        This method first performs checks for required fields, properties, and parameters.
-        Then, it calls the `transform` method to get the new data and merges this
-        data into a new Message object and updates the host component's properties.
-
-        Args:
-            message: The input Message object.
-            component: The host Component that this mutation is part of.
-
-        Returns:
-            A tuple containing:
-            - new_message: The transformed Message object.
-            - new_host_props: A dictionary of new properties for the host component.
-        """
-        self.check(message, component)
-
-        #create independent copies of the message and component
-        component = deepcopy(component)
-        message = deepcopy(message)
-        #determine the new fields for the message and properties for message and host
-        new_msg_fields, new_msg_props, new_host_props = self.transform(message, component)
-        #merge information into a new outgoing message
-        new_message = Message(message.fields | new_msg_fields, message.properties | new_msg_props)
-
-        return new_message, new_host_props
-    
 # Basic & example implementations
 
 class DummyMutate(Mutate):
@@ -251,6 +61,46 @@ class DummyMutate(Mutate):
 
         return msg_fields, msg_props, host_props
         
+class InputMessage(Mutate):
+    """
+    A mutation which can accept a message as a parameter - this can be used to link
+    the output of one ExecutionGraph into the input of another.
+    """
+    def __init__(self, name: str = "InputMessage"):
+        #Input message fields
+        msg_fields = VarCollection()
+    
+        #Input message properties
+        msg_properties = VarCollection()
+
+        #Input host parameters
+        host_parameters = VarCollection(input_message = "input message (Message)",)
+        
+        inputs = MutationInputs(msg_fields, msg_properties, host_parameters)
+
+        #Output message fields
+        msg_fields = VarCollection()
+
+        #Output message properties
+        msg_properties = VarCollection()
+
+        #Output host properties
+        host_properties = VarCollection()
+        outputs = MutationOutputs(msg_fields, msg_properties, host_properties)
+
+        super().__init__(name, inputs, outputs)
+
+    def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
+
+        #create the new fields in the message
+        input_message = component.parameters[self.inputs.host_parameters.input_message]
+        msg_fields = {**input_message.fields}
+        msg_props = {**input_message.properties}
+
+        #create the new properties in the host
+        host_props = {}
+
+        return msg_fields, msg_props, host_props
 
 class CollectImage(Mutate):
     """
@@ -281,10 +131,12 @@ class CollectImage(Mutate):
         #Output message properties
         msg_properties = VarCollection(resolution = "resolution (n,n)",
                                        bitdepth = "bitdepth (n)",
-                                       sample_rate = "sample rate (Hz)",)
+                                       sample_rate = "sample rate (Hz)",
+                                       images = "images (n)",)
 
         #Output host properties
-        host_properties = VarCollection(sensor_power = "sensor power (W)",)
+        host_properties = VarCollection(sensor_power = "sensor power (W)",
+                                        )
 
         outputs = MutationOutputs(msg_fields, msg_properties, host_properties)
         super().__init__(name, inputs, outputs)
@@ -305,7 +157,8 @@ class CollectImage(Mutate):
         
         msg_props = {self.outputs.msg_properties.resolution: resolution,
                      self.outputs.msg_properties.bitdepth: bitdepth,
-                     self.outputs.msg_properties.sample_rate: sample_rate}
+                     self.outputs.msg_properties.sample_rate: sample_rate,
+                     self.outputs.msg_properties.images: 1,}
 
         #create the new properties in the host
         host_props = {self.outputs.host_properties.sensor_power: sensor_power,}
@@ -629,3 +482,53 @@ class StorageRate(Mutate):
         storage_rate = message.fields[self.inputs.msg_fields.total_data] * message.properties[self.inputs.msg_properties.sample_rate]
         new_host_properties = {self.outputs.host_properties.storage_rate: storage_rate}
         return {}, {}, new_host_properties
+    
+class StoreImage(Mutate):
+    """
+    Accumulate images in a buffer written to disk
+    """
+    def __init__(self, name: str = "StoreImage"):
+        #Input message fields
+        msg_fields = VarCollection(image_data = "image data (B)",)
+    
+        #Input message properties
+        msg_properties = VarCollection(images = "images (n)",)
+
+        #Input host parameters
+        host_parameters = VarCollection(storage_rate = "disk storage rate (B/s)",
+                                        stored_data = "stored data (B)",
+                                        stored_images = "stored images (n)",)
+        
+        inputs = MutationInputs(msg_fields, msg_properties, host_parameters)
+
+        #Output message fields
+        msg_fields = VarCollection(stored_data = "stored data (B)",)
+
+        #Output message properties
+        msg_properties = VarCollection(stored_images = "stored images (n)",)
+
+        #Output host properties
+        host_properties = VarCollection(storage_latency = "storage latency (s)",)
+        
+        outputs = MutationOutputs(msg_fields, msg_properties, host_properties)
+
+        super().__init__(name, inputs, outputs)
+
+    def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
+        #access the required fields/properties/parameters
+        images = message.properties[self.inputs.msg_properties.images]
+        n_bytes = message.fields[self.inputs.msg_fields.image_data]
+
+        storage_rate = component.parameters[self.inputs.host_parameters.storage_rate]
+        stored_data = component.parameters[self.inputs.host_parameters.stored_data]
+        stored_images = component.parameters[self.inputs.host_parameters.stored_images]
+
+        #create the new fields in the message
+        msg_fields = {self.outputs.msg_fields.stored_data: stored_data + n_bytes,}
+        msg_props = {self.outputs.msg_properties.stored_images: stored_images + images,}
+
+        #create the new properties in the host
+        host_props = {self.outputs.host_properties.storage_latency: n_bytes / storage_rate,}
+
+        return msg_fields, msg_props, host_props
+    

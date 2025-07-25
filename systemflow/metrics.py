@@ -1,4 +1,40 @@
+"""
+Copyright 2025, UChicago Argonne LLC. 
+Please refer to 'license' in the root directory for details and disclosures.
+"""
+
 import numpy as np
+from systemflow.node import Message, ExecutionGraph, Regex
+from abc import ABC
+import re
+
+from systemflow.node import *
+
+class TotalOps(Metric):
+    def __init__(self):
+        super().__init__("Total operations", 
+                         [],
+                         [Regex(r"ops \(n,n\)"),],)
+        
+    def metric(self, message: Message, properties: dict):
+        matches = self.graph_matches(properties)
+        ops = np.sum([np.prod(op) for op in matches])
+        metrics = {"total ops (n)": ops,}
+        
+        return metrics
+    
+class TotalLatency(Metric):
+    def __init__(self):
+        super().__init__("Total latency", 
+                         [Regex(r"latency \(s\)"),],
+                         [],)
+        
+    def metric(self, message: Message, properties: dict):
+        matches = self.message_matches(message)
+        ops = np.sum(matches)
+        metrics = {"total latency (s)": ops,}
+        
+        return metrics
 
 def precision(matrix):
     tp = matrix[1,1]
