@@ -262,14 +262,14 @@ class PhaseReconstruction3D(Mutate):
     
         #Input message properties
         msg_properties = VarCollection(resolution = "resolution (n,n)",
-                                       xy_images = "xy_images (n,n)",
                                        bitdepth = "bitdepth (n)",)
 
         #Input host parameters
         host_parameters = VarCollection(op_latency = "op latency (s)",
                                         parallelism = "parallelism (%)",
                                         overlap = "overlap (%)",
-                                        iterations = "iterations (n)",)
+                                        iterations = "iterations (n)",
+                                        xy_images = "xy images (n,n)",)
         
         inputs = MutationInputs(msg_fields, msg_properties, host_parameters)
 
@@ -290,9 +290,9 @@ class PhaseReconstruction3D(Mutate):
     def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
         #access the required fields/properties/parameters
         #calculate the size of the reconstruction
-        n_steps_x, n_steps_y = message.properties[self.inputs.msg_properties.xy_images]
+        n_steps_x, n_steps_y = component.parameters[self.inputs.host_parameters.xy_images]
         images = n_steps_x * n_steps_y
-        overlap = component.properties[self.inputs.host_parameters.overlap]
+        overlap = component.parameters[self.inputs.host_parameters.overlap]
         px_x, px_y = message.properties[self.inputs.msg_properties.resolution]
         # the first step is a full image, and the next expands the area by 1 - the overlap
         reconst_x = (px_x) + (1.0 - overlap) * (n_steps_x - 1) # reconstructed x resolution

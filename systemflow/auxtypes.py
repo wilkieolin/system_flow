@@ -13,6 +13,12 @@ from collections import namedtuple
 #:  properties (dict): A dictionary containing sample-independent data (e.g. resolution, sample rate)
 Message = namedtuple("Message", ["fields", "properties"])
 
+empty_message = lambda: Message({}, {})
+
+def merge_message(message: Message, new_fields: dict, new_properties: dict):
+    new_message = Message(message.fields | new_fields, message.properties | new_properties)
+    return new_message
+
 #Collection to hold named variables as subfields for convenience
 class VarCollection:
     def __init__(self, **kwargs):

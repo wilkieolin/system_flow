@@ -102,6 +102,49 @@ class InputMessage(Mutate):
 
         return msg_fields, msg_props, host_props
 
+class InputExecutionGraph(Mutate):
+    """
+    A mutation which can accept a message as a parameter - this can be used to link
+    the output of one ExecutionGraph into the input of another.
+    """
+    def __init__(self, name: str = "InputExecutionGraph"):
+        #Input message fields
+        msg_fields = VarCollection()
+    
+        #Input message properties
+        msg_properties = VarCollection()
+
+        #Input host parameters
+        host_parameters = VarCollection(input_graph = "input graph (ExecutionGraph)",)
+        
+        inputs = MutationInputs(msg_fields, msg_properties, host_parameters)
+
+        #Output message fields
+        msg_fields = VarCollection()
+
+        #Output message properties
+        msg_properties = VarCollection()
+
+        #Output host properties
+        host_properties = VarCollection()
+        outputs = MutationOutputs(msg_fields, msg_properties, host_properties)
+
+        super().__init__(name, inputs, outputs)
+
+    def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
+
+        #create the new fields in the message
+        input_graph = component.parameters[self.inputs.host_parameters.input_graph]
+        input_message = input_graph.get_output_msg()
+        msg_fields = {**input_message.fields}
+        msg_props = {**input_message.properties}
+
+        #create the new properties in the host
+        host_props = {}
+
+        return msg_fields, msg_props, host_props
+
+
 class CollectImage(Mutate):
     """
     A mutation which models collecting an image from a 2-D Pixel sensor.
@@ -495,9 +538,9 @@ class StoreImage(Mutate):
         msg_properties = VarCollection(images = "images (n)",)
 
         #Input host parameters
-        host_parameters = VarCollection(storage_rate = "disk storage rate (B/s)",
-                                        stored_data = "stored data (B)",
-                                        stored_images = "stored images (n)",)
+        host_parameters = VarCollection(stored_data = "stored data (B)",
+                                        stored_images = "stored images (n)",
+                                        storage_rate = "disk storage rate (B/s)",)
         
         inputs = MutationInputs(msg_fields, msg_properties, host_parameters)
 

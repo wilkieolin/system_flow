@@ -32,6 +32,34 @@ def collect_parameters(mutations: list['Mutate'], to_dict: bool = False) -> dict
         collection = VarCollection(**host_params_dict)
         return collection
 
+def match_message_to_parameters(exg: 'ExecutionGraph', var_collection: VarCollection, hostname: str = ""):
+    """
+    Extracts values from the output message of an execution graph that match
+    the fields/properties specified in a VarCollection.
+
+    Parameters:
+        exg: ExecutionGraph instance
+        var_collection: VarCollection instance
+
+    Returns:
+        dict: {var_name: value_from_msg}
+    """
+    msg = exg.get_output_msg()
+    result = {}
+
+    # Check fields
+    for var_name, field_key in var_collection.__dict__.items():
+        if hasattr(msg, "fields") and field_key in msg.fields:
+            result[field_key] = msg.fields[field_key]
+        elif hasattr(msg, "properties") and field_key in msg.properties:
+            result[field_key] = msg.properties[field_key]
+
+    if len(hostname) == 0:
+        return result
+    else:
+        parameter_map = {hostname: result}
+        return parameter_map
+
 """
 Given a set of inputs for a mutation, metric, or other process, check to see if these are present
 in the incoming message and on the host component.
@@ -154,11 +182,33 @@ class Mutate(ABC):
     When called, it applies this transformation and can update the message
     and/or add new properties to the host component.
     """
-    def __init__(self, name: str, inputs: MutationInputs, outputs: MutationOutputs):
+    def __init__(self, name: str, inputs: MutationInputs, outputs: MutationOutputs, init_fields: dict = {}, init_properties: dict = {}):
         self.name = name
         self.inputs = inputs
         self.outputs = outputs
+        self.init_fields = init_fields
+        self.init_properties = init_properties
         self.check = RequirementChecker(name, inputs)
+
+    def init_values(self, message: Message):
+        """
+        This function can be used to apply initial values to an incoming message. This is
+        primarily used when there is a state which a mutation confers which is used in subsequent
+        applications, but is not included in the first incoming message.
+        """
+
+        #for any init value in fields
+        for key, value in self.init_fields:
+            #which is not already in the message
+            if key not in message.fields.keys():
+                #apply the init value
+                message.fields[key] = value
+        #and repeat for properties
+        for key, value in self.init_properties:
+            if key not in message.properties.keys():
+                message.properties[key] = value
+
+        return message
     
     def transform(self, message: Message, component: 'Component') -> tuple[dict, dict, dict]:
         """
@@ -202,15 +252,17 @@ class Mutate(ABC):
             - new_message: The transformed Message object.
             - new_host_props: A dictionary of new properties for the host component.
         """
-        self.check(message, component)
-
         #create independent copies of the message and component
         component = deepcopy(component)
         message = deepcopy(message)
+        #apply initial values
+        message = self.init_values(message)
+        #check all values necessary for transform are present
+        self.check(message, component)
         #determine the new fields for the message and properties for message and host
         new_msg_fields, new_msg_props, new_host_props = self.transform(message, component)
         #merge information into a new outgoing message
-        new_message = Message(message.fields | new_msg_fields, message.properties | new_msg_props)
+        new_message = merge_message(message, new_msg_fields, new_msg_props)
 
         return new_message, new_host_props
     
@@ -298,18 +350,20 @@ class Component(ABC):
         
         if len(self.mutations) > 0:
             #go through the mutations on this component
-            mutations = list(accumulate(self.mutations, lambda x, f: f(x[0], self), initial=(input_msg, {})))
+            mutations = list(accumulate(self.mutations, lambda x, f: f(x[0], self), initial=(input_msg, self.properties)))
             #separate the message and property outputs
             properties = [output[1] for output in mutations]
-            merged_properties = reduce(lambda x, y: x | y, properties) | self.properties
+            merged_properties = reduce(lambda x, y: x | y, properties)
             output_msg = mutations[-1][0]
         else:
             #pass through the existing properties & merged message if no mutations present
             merged_properties = self.properties
             output_msg = input_msg
 
+        #provide history for stateful updates if needed
+        #updated_properties = self.update_properties(input_msg, merged_properties)
         #store the new output message in the new component
-        new_component = Component(self.name, self.mutations, self.parameters, merged_properties)
+        new_component = Component(self.name, self.mutations, self.parameters, properties=merged_properties)
         new_component.output_msg = output_msg
         
         return new_component, input_components
@@ -867,24 +921,30 @@ class System(ABC):
         exec_graphs (list[ExecutionGraph]): A list of ExecutionGraphs managed by this system.
         iter (int): A counter for system-level iterations 
     """
-    def __init__(self, name: str, exec_graphs: list[ExecutionGraph], iter: int = 0, execution_history: list[ExecutionGraph] = []):
+    def __init__(self, name: str, exec_graphs: dict[ExecutionGraph], iter: int = 0, execution_history: list[ExecutionGraph] = []):
         self.name = name
         self.exec_graphs = exec_graphs
-        self.exeuction_history = execution_history
+        self.execution_history = execution_history
         self.iter = iter
 
-    def flow_control(self): 
+    def step(self): 
         """
-        User-replacable function which determines what order graphs execute in and how they
-        interchange control, repeat, etc.
+        User-replacable function which determines what order graphs execute in.
         """
-        #dummy control flow executs all graphs in order, once
+        #dummy step executs all graphs in order, once
         new_graphs = [graph() for graph in self.exec_graphs]
 
+    def flow_control(self):
+        """
+        User-replacable function which determines what variable each step moves over.
+        """
+        #dummy flow control just calls step
+        return self.step()
 
     def __call__(self) -> 'System':
         """
-        Executes all ExecutionGraphs contained within this System.
+        Calls flow_control to orchestrate the order of execution graphs and returns the history
+        into a new system.
 
         Returns:
             A new System instance with the updated states of its ExecutionGraphs.
