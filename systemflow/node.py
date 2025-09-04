@@ -717,6 +717,16 @@ class ExecutionGraph(ABC):
 
         return g
     
+    def get_mutations(self) -> list[Mutate]:
+        """
+        Returns a flattened list of all mutations from all components in the execution graph.
+        """
+        all_mutations = []
+        for component in self.nodes:
+            if hasattr(component, "mutations"):
+                all_mutations.extend(component.mutations)
+        return all_mutations
+    
     def get_node(self, name: str) -> Component:
         """
         Retrieves a Component instance from the graph by its name.
@@ -829,6 +839,9 @@ class ExecutionGraph(ABC):
             return self.root_node.output_msg
         else:
             return None
+        
+    def list_nodes(self):
+        return [n.name for n in self.nodes]
     
     def with_updated_parameters(self, new_parameters_map: dict[str, dict]) -> 'ExecutionGraph':
         """
@@ -863,8 +876,7 @@ class ExecutionGraph(ABC):
         for node in self.nodes:
             if node.name in new_parameters_map.keys():
                 new_parameters = node.parameters | new_parameters_map[node.name]
-                new_mutations = [mutation.__class__() for mutation in node.mutations]
-                new_node = Component(node.name, new_mutations, parameters=new_parameters, merge=node.merge)
+                new_node = Component(node.name, node.mutations, parameters=new_parameters, merge=node.merge)
             else:
                 new_node = Component(node.name, node.mutations, parameters=node.parameters, merge=node.merge)
             new_nodes.append(new_node)

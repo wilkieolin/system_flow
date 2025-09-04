@@ -18,6 +18,7 @@ class PositionSample(Mutate):
     def __init__(self, name: str = "PositionSample", relevancy_f: Callable = lambda x: 1.0): 
         #"Secret" sample function which determines which locations are of interest
         self.relevancy_f = relevancy_f
+        print(relevancy_f)
 
         #Originator node, no input fields
         #Input message fields
@@ -52,7 +53,9 @@ class PositionSample(Mutate):
         #predict the relevancy of the collected data based on position
         position = component.parameters[self.inputs.host_parameters.position]
         last_position = component.parameters[self.inputs.host_parameters.last_position]
+        print("Position: ", position)
         relevancy = self.relevancy_f(position)
+        print("Relevancy:", relevancy)
 
         x_vec = position[0] - last_position[0]
         y_vec = position[1] - last_position[1]
