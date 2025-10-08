@@ -53,9 +53,9 @@ class PositionSample(Mutate):
         #predict the relevancy of the collected data based on position
         position = component.parameters[self.inputs.host_parameters.position]
         last_position = component.parameters[self.inputs.host_parameters.last_position]
-        print("Position: ", position)
+        #print("Position: ", position)
         relevancy = self.relevancy_f(position)
-        print("Relevancy:", relevancy)
+        #print("Relevancy:", relevancy)
 
         x_vec = position[0] - last_position[0]
         y_vec = position[1] - last_position[1]
