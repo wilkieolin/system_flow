@@ -4,6 +4,8 @@ Version: 0.1.0
 Summary: Modeling dependencies and effects in scientific data processing systems
 Author: Wilkie Olin-Ammentorp
 Author-email: wolinammentorp@anl.gov
+License-File: LICENSE
 Dynamic: author
 Dynamic: author-email
+Dynamic: license-file
 Dynamic: summary

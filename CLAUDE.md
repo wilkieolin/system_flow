@@ -52,7 +52,7 @@ Procedural API using flat networkx DiGraphs. Being replaced by the v2.0 framewor
 
 2. **Use `hep_with_updated_parameters` for HEP graphs**, not `with_updated_parameters` directly. It auto-recomputes `"global ratio (1)"` on detectors when reduction ratios change.
 
-3. **Classifier data paths are CWD-relative.** `L1TClassifier`/`HLTClassifier` load from `os.path.join(os.getcwd(), 'HEP', 'l1t_data')`. Notebooks must run from project root.
+3. **Classifier data paths are CWD-relative.** `L1TClassifier`/`HLTClassifier` search for data in `CWD/HEP/l1t_data` then `CWD/l1t_data`. Notebooks can run from either the project root or the `HEP/` directory.
 
 4. **Stochastic classifiers.** L1T/HLT use 50k samples internally — expect 1-5% variation between runs.
 

@@ -13,6 +13,21 @@ from scipy.optimize import minimize_scalar
 from scipy.interpolate import PchipInterpolator
 from scipy.integrate import quad
 
+def _find_data_dir(subdir):
+    """Locate classifier data directory, searching CWD/HEP/<subdir> then CWD/<subdir>."""
+    candidate = os.path.abspath(os.path.join(os.getcwd(), 'HEP', subdir))
+    if os.path.isdir(candidate):
+        return candidate
+    candidate = os.path.abspath(os.path.join(os.getcwd(), subdir))
+    if os.path.isdir(candidate):
+        return candidate
+    raise FileNotFoundError(
+        f"Cannot find '{subdir}' directory. Looked in "
+        f"'{os.path.join(os.getcwd(), 'HEP', subdir)}' and "
+        f"'{os.path.join(os.getcwd(), subdir)}'. "
+        f"Run from the project root or the HEP/ directory."
+    )
+
 """
 Error matrix representing a dummy classifier (no classification)
 """
@@ -134,7 +149,7 @@ class L1TClassifier(Classifier):
         self.triggers = ["Jet", "Muon", "EGamma", "Tau"]
         #read trigger data from external files
         #efficiency curves
-        parent_dir = os.path.abspath(os.path.join(os.getcwd(), 'HEP', "l1t_data"))
+        parent_dir = _find_data_dir("l1t_data")
         self.egamma = pd.read_csv(os.path.join(parent_dir, "egamma.csv"))
         self.muon = pd.read_csv(os.path.join(parent_dir, "single muon.csv"))
         self.jet_energy = pd.read_csv(os.path.join(parent_dir, "jet energy.csv"))
@@ -336,7 +351,7 @@ class HLTClassifier(Classifier):
         #efficiency curves
         # data taken and fitted from approved CMS 2018 Data:
         # https://twiki.cern.ch/twiki/bin/view/CMSPublic/HighLevelTriggerRunIIResults
-        parent_dir = os.path.abspath(os.path.join(os.getcwd(), 'HEP', "hlt_data"))
+        parent_dir = _find_data_dir("hlt_data")
         b2g = pd.read_csv(os.path.join(parent_dir, "B2G.csv"))
         higgs = pd.read_csv(os.path.join(parent_dir, "higgs.csv"))
         muon = pd.read_csv(os.path.join(parent_dir, "Muon.csv"))

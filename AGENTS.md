@@ -377,7 +377,7 @@ def vary_skill(base_def, skill):
    Use `hep_with_updated_parameters` for HEP graphs when changing `"reduction ratio (1)"` on any processor. It auto-recomputes `"global ratio (1)"` on all detectors. Using `with_updated_parameters` directly will leave global ratios stale.
 
 3. **Classifier data path dependency.**
-   `L1TClassifier` and `HLTClassifier` load data from `os.path.join(os.getcwd(), 'HEP', 'l1t_data')` and `'hlt_data'` respectively. The working directory must be the project root when instantiating these classifiers.
+   `L1TClassifier` and `HLTClassifier` search for data in `CWD/HEP/l1t_data` then `CWD/l1t_data` (and similarly for `hlt_data`). The working directory must be either the project root or the `HEP/` directory.
 
 4. **Stochastic classifiers.**
    L1T and HLT classifiers use 50,000 stochastic samples internally. Results vary 1-5% between runs. For reproducibility, set `np.random.seed()` before instantiation, or use `n_samples` parameter.
