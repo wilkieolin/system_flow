@@ -18,7 +18,6 @@ class PositionSample(Mutate):
     def __init__(self, name: str = "PositionSample", relevancy_f: Callable = lambda x: 1.0): 
         #"Secret" sample function which determines which locations are of interest
         self.relevancy_f = relevancy_f
-        print(relevancy_f)
 
         #Originator node, no input fields
         #Input message fields
